@@ -9,9 +9,12 @@ A free, playful maths practice game for the Cambridge curriculum, Grades 1–9 (
 - Four worlds to choose from: Space, Ocean, Jungle and Candy
 - A parent area behind a PIN: set wishes that unlock at 25%, 50%, 75% and 100% of a grade, see a progress report, and change settings
 - Read-aloud button for younger players
+- 🏅 A leaderboard with fun nicknames: points, active minutes, skills mastered, streak, questions and first-try %, this week or all time, by grade
+- 🔔 Optional daily reminders, Duolingo style: a motivating message on days nobody has played yet
+- A one-minute setup for grown-ups, Add to Home Screen help, and 🚩 on every question to report a problem
 - Works offline. Progress is saved in the browser on each device (use the backup code in the parent area to move it)
 
-Everything is in the single `index.html` file; there is no server and nothing is sent anywhere.
+The game is the single `index.html` file and plays the same without internet. The online parts are optional and use the game's Firebase project: family accounts, and for the friends-and-family test anonymous play stats, feedback, the leaderboard and reminders (see [Family test extras](#family-test-extras)).
 
 ## Editing the game
 
@@ -25,7 +28,16 @@ Everything is in the single `index.html` file; there is no server and nothing is
 | `src/fx.js` | Themes, backgrounds, celebration effects and sound |
 | `src/visuals.js` | The SVG teaching pictures |
 | `src/shell.html` | Page markup and styles |
+| `src/config.js` | Firebase settings, feature switches (`PMLM_FEATURES`) and the reminder public key |
+| `src/config.preview.js` | The same for the preview copy (staging Firebase project) |
+| `src/online.js` | Anonymous stats, feedback, leaderboard and reminder subscriptions (Firebase REST, own anonymous sign-in) |
+| `src/board.js` | Leaderboard nicknames, weeks and ranking |
+| `src/reminders.js` | Reminder messages and the rules for when to send one |
+| `src/stats.html` | The test dashboard (built into `stats.html`) |
+| `sw.js`, `manifest.webmanifest`, `icons/` | Home Screen app and reminder notifications (`node tools/make-icons.mjs` redraws the icons) |
 | `tools/check-content.mjs` | Runs every question generator many times and reports problems |
+| `tools/admin/` | Owner tools: the reminder sender, database backup, reminder key setup |
+| `tests/` | Everything that must pass before a change goes to `main` (`tests/run-all.sh`) |
 
 After changing a grade file, check it, rebuild, and push. GitHub Pages updates the live site within a minute or two.
 
@@ -79,3 +91,65 @@ cd tools/rules-test && npm run emulator
 ```bash
 cd tools/rules-test && FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm test
 ```
+
+## Family test extras
+
+While friends and families try the game, these help us learn what works. Each can be switched off for everyone in `PMLM_FEATURES` (`src/config.js`), then rebuild and push.
+
+- **Anonymous play stats:** each device sends small events (opened the game, new player with grade, lesson, round with counts and minutes, wish set or unlocked, a question that failed to load). They carry a random device id and the random player id, never names. Parents can switch it off under Parents → Settings. The `?src=` part of an invite link (for example `?src=ff1`) is remembered, so invite waves can be compared.
+- **Feedback:** 🚩 on any question (with the question, the expected answer and what the child typed), and a "Tell us what you think" box in the Parents area.
+- **Leaderboard (🏅 Top tab):** one entry per child per device in the `leaderboard` collection, with a generated nickname unless a grown-up picks "First name" or "Hidden" under Parents → Players. Minutes count active play only (at most 90 seconds per answered question). The weekly board starts every Monday.
+- **Stats dashboard:** `stats.html` on the live site. Sign in with Google. The first time it shows your account id: add a document with that id to an `admins` collection in the Firebase console (any field, for example `ok: true`) and reload.
+
+### Daily reminders
+
+A grown-up turns them on per device under Parents → Daily reminder and picks a time. On iPhone and iPad they work from the Home Screen app (iOS 16.4 or newer). Every hour `.github/workflows/reminders.yml` runs `tools/admin/send-reminders.mjs`, which sends a device its message only at the chosen time, only on days nobody on it has played yet, daily for 3 missed days, then every 3rd day, stopping after 14 days. The rules and messages are in `src/reminders.js`.
+
+One-time setup (until then the reminder card is hidden and the hourly job does nothing):
+
+```bash
+cd tools/admin && npm ci && cd ../.. && node tools/admin/setup-push.mjs
+```
+
+That writes the public key into `src/config.js`, stores the private key as the GitHub secret `VAPID_PRIVATE_KEY` without showing it, and rebuilds. Then in the Firebase console → Project settings → Service accounts → Generate new private key, and store it:
+
+```bash
+gh secret set FIREBASE_SERVICE_ACCOUNT --repo Rendorf/play-more-learn-more < ~/Downloads/your-key-file.json
+```
+
+Delete the downloaded key file afterwards (or keep it in `~/.config/pmlm/live-service-account.json` for backups). To send yourself a test reminder: GitHub → Actions → Daily reminders → Run workflow, with your device id from the `push` collection. GitHub pauses scheduled jobs after 60 days without any change to the repository; re-enable it there if that happens.
+
+## Tests
+
+Everything that must pass before a change reaches `main`. GitHub runs it on every pull request (`.github/workflows/test.yml`); to run it yourself (Node 22, Python 3, Java 21):
+
+```bash
+tests/run-all.sh
+```
+
+1. Question content for all grades, and `index.html` / `stats.html` up to date with `src/`
+2. Unit tests: leaderboard ranking, weeks, nicknames, reminder timing and back-off, the online module
+3. Database rules in the Firestore emulator: the family-account rules and the new collections
+4. Browser tests (Chromium, and WebKit for iPhone and iPad) against local Auth and Firestore emulators:
+   - every existing flow: placement, lessons, practice, PIN, wishes, boss, fix-it, shop, themes, backup codes
+   - **progress safety:** progress saved by the live version (`tests/fixtures/`) opens unchanged, playing only adds, rolling back keeps everything, old backup codes work, and the preview copy never touches real progress
+   - **family sync across versions:** one device on the live version, one on the new version, same child, nothing lost
+   - the new features, the game with no internet, the dashboard, phone and tablet layouts, the reminder sender and backup/restore
+
+The browser tests never use the real Firebase project: `?emu=1` points the game at the local emulators, and family accounts are tested with `tools/mock-firebase.js`. `cd tests && npm run fixtures` refreshes the saved-progress fixtures from the live version.
+
+## Releasing safely
+
+1. Work on a branch and open a pull request; the template there has the full checklist.
+2. **Preview on real phones** with a separate staging Firebase project, so real children's progress, the live leaderboard and live stats are never touched. One-time setup: create a Firebase project (for example `playmorelearnmore-staging`), turn on Email/Password, Google and Anonymous sign-in, add `rendorf.github.io` to its authorized domains, create the Firestore database, publish `firestore.rules`, and paste its web config into `src/config.preview.js`. For reminders on the preview: `node tools/admin/setup-push.mjs --preview`, and save its service-account key as `~/.config/pmlm/staging-service-account.json`. Then:
+   ```bash
+   tools/deploy-preview.sh
+   ```
+   It publishes `https://rendorf.github.io/pmlm-preview/` (red PREVIEW ribbon, "PMLM Preview" on the Home Screen). The preview keeps its own storage on the device. Send a test reminder there with `node tools/admin/send-reminders.mjs --env staging --only <device id>`.
+3. **Before merging:** back up the live database (read-only; the file goes outside the repository):
+   ```bash
+   node tools/admin/backup-firestore.mjs --key ~/.config/pmlm/live-service-account.json
+   ```
+   then publish the new `firestore.rules` to the live project, and set up reminder keys if needed.
+4. **Merge** only when the tests are green and the checklist is done, then check the live version: `curl -s https://rendorf.github.io/play-more-learn-more/ | grep "const BUILD"`.
+5. **If something is wrong:** `git revert -m 1 <merge commit>` and push. The old version comes back in 1–2 minutes and keeps everyone's progress (the tests check this). Or switch off one feature in `PMLM_FEATURES`. `backup-firestore.mjs --restore <file> --yes` puts back database documents from a backup.

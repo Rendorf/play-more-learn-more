@@ -8,24 +8,32 @@ A DopaDrill-style maths practice game for the Cambridge curriculum, Grades 1–9
 
 ## Layout
 - `src/` is the source; `index.html` is **generated**. Never edit `index.html` by hand.
-  - `config.js`: Firebase web config (`PMLM_FIREBASE`; public by design).
+  - `config.js`: Firebase web config (`PMLM_FIREBASE`; public by design), `PMLM_ENV`, feature switches `PMLM_FEATURES` and the reminder public key `PMLM_VAPID`. `config.preview.js` is the same for the preview copy (staging project).
   - `util.js`: `U` helpers for question generators.
   - `registry.js`: `PMLM` skill and unit registry.
   - `validate.js`: content checks shared by the checker and the in-game self-test.
   - `grade1.js` … `grade9.js`: lessons and question generators, 201 skills. The format is in `src/CONTRACT.md`.
   - `visuals.js`: rich-text markup and 26 SVG teaching pictures.
   - `fx.js`: themes (Space, Ocean, Jungle, Candy), world backgrounds, particles, Web Audio sounds and music, and the mechanical key sound `Sfx.key`.
-  - `engine.js`: state and storage, rounds and mastery, wishes, parent area, family accounts (`Sync`), all screens.
+  - `board.js`: leaderboard nicknames, ISO weeks, active minutes, ranking (`Board`, pure).
+  - `reminders.js`: reminder messages and when to send one (`PMLM_REMINDERS`, pure; also loaded by the sender).
+  - `online.js`: family-test extras over Firebase REST with its own anonymous sign-in (`Online`): stats events, feedback, leaderboard docs, push subscriptions, Home Screen install. Separate from `Sync`.
+  - `engine.js`: state and storage, rounds and mastery, wishes, parent area, family accounts (`Sync`), the Top tab, all screens.
+  - `stats.html`: the owner's dashboard (build.py writes the root `stats.html`).
   - `shell.html`: markup and CSS. Each theme is a full token set on `:root[data-world=…]`. Every button is a "keycap" driven by `--face` / `--d`.
-- `build.py` inlines `src/` into `index.html` and `build/artifact.html`, and stamps `BUILD` (shown in Parents and per device).
+- `build.py` inlines `src/` into `index.html`, `stats.html`, `manifest.webmanifest` and `build/artifact.html`, and stamps `BUILD` (shown in Parents and per device). `--preview` builds `build/preview/`; `--check` fails if the generated files are stale.
+- `sw.js`: push-only service worker (no caching). `icons/`: app icons from `icons/icon.svg` (`node tools/make-icons.mjs`).
 - `firestore.rules`: the database security rules. **Not auto-deployed.** After changing them, the owner pastes the file into Firebase console → Firestore → Rules → Publish.
 - `tools/check-content.mjs`: content checker. `tools/rules-test/`: rules tests in the Firestore emulator. `tools/mock-firebase.js` and `tools/make-synctest.py`: an in-memory Firebase stand-in for testing family-account flows.
+- `tools/admin/`: owner tools with a service account: `send-reminders.mjs` (hourly via `.github/workflows/reminders.yml`), `backup-firestore.mjs`, `setup-push.mjs`. `tools/deploy-preview.sh` publishes the preview to `Rendorf/pmlm-preview`.
+- `tests/`: `run-all.sh` runs every check (also in `.github/workflows/test.yml`); unit tests, Playwright browser tests (`tests/e2e/`) and saved progress from the live version (`tests/fixtures/`).
 
 ## Commands
 Run these from the repo root.
 - **Build:** `python3 build.py`
 - **Check one grade's content:** `node tools/check-content.mjs src/grade6.js`. Add `--samples 3` to read questions, or list all grade files together.
-- **Local preview:** `python3 -m http.server 8765 --bind 127.0.0.1`, then open `http://localhost:8765/index.html`.
+- **Local preview:** `python3 -m http.server 8765 --bind 127.0.0.1`, then open `http://localhost:8765/index.html`. Online extras are off on localhost; add `?emu=1` with the emulators running (`cd tests && npx firebase emulators:start --project demo-pmlm --config ../firebase.json --only auth,firestore`).
+- **All checks before merging:** `tests/run-all.sh` (Java via Homebrew `openjdk`). One area: `cd tests && npm run unit`, or `npm run e2e -- -g leaderboard`.
 - **In-game self-test:** open `index.html#selftest`, then read `window.__selftest`. It must show 201 skills and 0 problems.
 - **Family-account flow tests:** `python3 tools/make-synctest.py` writes `build/synctest.html`, which uses the mock backend. Each "device" is a localStorage snapshot and the mock "server" lives in sessionStorage.
 - **Rules tests:** run `cd tools/rules-test && npm install && npm run emulator` in one terminal, then `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm test`. Needs Java (Homebrew `openjdk`).
@@ -58,11 +66,15 @@ Run these from the repo root.
 - **Family team goal** (`state.team`, in the shared doc): every player's real rounds this week (Monday to Sunday) fill one bar. Each child sees the celebration once per week (`p.teamSeen`).
 - **Lazy defaults:** reading a player never writes defaults into it, so looking at a sibling's data can't make their copy look newer. Only real events create the new fields.
 - **Debug clock:** in `#debug`, Parents → Debug has "Next day ⏭" (a day shift kept in sessionStorage) and "Play a perfect round", and `window.__pmlm` exposes the state for testing.
-- **Failed questions:** if a skill's questions can't be made on a device, the child sees "didn't load", and a note goes to `player.diag` (synced) with the user agent and `BUILD`.
+- **Failed questions:** if a skill's questions can't be made on a device, the child sees "didn't load", and a note goes to `player.diag` (synced) with the user agent and `BUILD`, and a `problem` stats event.
+- **Family test extras (`Online`):** collections `events` and `feedback` (create only), `leaderboard/{pid}_{uid}` (owner writes; readers keep the newest doc per pid), `push/{uid}`, and `admins/{uid}` (written in the console; gates reading stats). Queue in `pmlm.q`. Off on localhost without `?emu=1`, in `#debug`/`#selftest` and in the artifact.
+- **Leaderboard and reminder fields** follow the lazy-defaults rule: `stats.active`, `week {id, pts, secs, q, mst}`, `board` ('nick' | 'name' | 'hidden') and `nickSeed` are only written by a played round or a grown-up's choice. Older versions keep them untouched; `tests/e2e/progress.spec.mjs` checks this.
+- **Preview copy:** `PMLM_ENV = 'preview'` switches every localStorage key to `pmlm-preview.` (it shares the rendorf.github.io origin with the live game).
 
 ## Conventions and gotchas
 - **Older tablets:** avoid `:is()` and other very new CSS/JS features. A dropped selector list silently unstyles everything. `color-mix` is already used, with background-color fallbacks.
 - **Question generators** must never return invalid questions. Run the checker after any content change; it catches format problems only, so read samples for maths correctness.
-- **Never test against the live family data.** Use the local preview (not signed in) or the mock. Don't create accounts in the owner's Firebase project.
+- **Never test against the live family data.** Use the local preview (not signed in), the emulators (`?emu=1`) or the mock. Don't create accounts in the owner's Firebase project.
+- **Saved progress is sacred.** Never rename or drop fields in `pmlm.v1` or player docs, never change `STORE_KEY` or `v`; only add optional fields. Run `tests/run-all.sh` before every merge.
 - **Firebase rules changes** need the owner to republish them in the console. Say so whenever `firestore.rules` changes.
 - **Commit messages:** imperative subject line, then a short body explaining why.

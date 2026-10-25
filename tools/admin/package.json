@@ -1,0 +1,10 @@
+{
+  "name": "pmlm-admin",
+  "private": true,
+  "type": "module",
+  "description": "Owner tools that use a Firebase service account: the reminder sender (run hourly by .github/workflows/reminders.yml) and the database backup.",
+  "dependencies": {
+    "firebase-admin": "14.4.0",
+    "web-push": "3.6.7"
+  }
+}

@@ -14,7 +14,9 @@
   const gradePick = (g, act = 'grade', extra = '') => `<div class="stack" style="gap:6px">
     <div class="row between"><span class="eyebrow">Grade</span><span class="muted" style="font-size:.85rem">Cambridge ${stageName(g)}</span></div>
     <div class="gradepick" role="tablist" aria-label="Grade">${GRADES.map(x => `<button class="${x === g ? 'on' : ''}" data-act="${act}" ${extra} data-id="${x}" data-v="${x}" aria-label="Grade ${x}">${x}</button>`).join('')}</div></div>`;
-  const STORE_KEY = 'pmlm.v1';
+  // The preview copy (build.py --preview) keeps its own storage, so it never reads or writes real progress
+  const KEY = typeof PMLM_ENV !== 'undefined' && PMLM_ENV === 'preview' ? 'pmlm-preview.' : 'pmlm.';
+  const STORE_KEY = KEY + 'v1';
   const BUILD = '__BUILD__';   // replaced with the build time by build.py
 
   const AVATARS = ['🦊', '🐼', '🐯', '🐸', '🐧', '🦄', '🐨', '🐰'];
@@ -163,7 +165,7 @@
     const CFG = typeof PMLM_FIREBASE !== 'undefined' ? PMLM_FIREBASE : null;
     const enabled = !!CFG && !IN_ARTIFACT;
     const SDK = 'https://www.gstatic.com/firebasejs/10.14.1/';
-    const FLAG = 'pmlm.sync';
+    const FLAG = KEY + 'sync';
     const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
     let fb = null, db = null, user = null, fid = null, role = null, me = {}, status = 'off', loading = null, flow = false, lastError = null;
     let unsubs = [], devices = [], parents = [], code = null, dupes = [];
@@ -636,6 +638,12 @@
     a.brain = add(a.brain, b.brain);
     for (const k of ['answered', 'correct', 'first', 'ms', 'rounds', 'fixed', 'perfect']) a.stats[k] = add(a.stats[k], (b.stats || {})[k]);
     a.stats.bestCombo = Math.max(a.stats.bestCombo || 0, (b.stats || {}).bestCombo || 0);
+    // Leaderboard extras (only when either record already has them)
+    if (a.stats.active != null || (b.stats || {}).active != null) a.stats.active = add(activeOf(a), activeOf(b));
+    if (b.week && (!a.week || b.week.id > a.week.id)) a.week = Object.assign({}, b.week);
+    else if (a.week && b.week && a.week.id === b.week.id) for (const k of ['pts', 'secs', 'q', 'mst']) a.week[k] = add(a.week[k], b.week[k]);
+    if (a.board == null && b.board != null) a.board = b.board;
+    if (a.nickSeed == null && b.nickSeed != null) a.nickSeed = b.nickSeed;
     a.owned = [...new Set([...(a.owned || []), ...(b.owned || [])])];
     for (const [k, t] of Object.entries(b.trophies || {})) if (!a.trophies[k] || t < a.trophies[k]) a.trophies[k] = t;
     const sb = b.streak || {}, best = Math.max(bestStreak(a), sb.best || 0, sb.days || 0), freezes = Math.max(freezesOf(a), sb.freezes == null ? 1 : sb.freezes);
@@ -696,6 +704,36 @@
     }
     return c;
   }
+
+  // ---------- Online extras (src/online.js): anonymous stats, leaderboard, reminders ----------
+  // New player fields are optional and only written when a round is played: stats.active (seconds of active
+  // play), week (this week's totals), board ('nick' | 'name' | 'hidden') and nickSeed (nickname re-rolls).
+  const stat = (type, data, p = P()) => { if (state.settings.stats !== false) Online.event(type, Object.assign(p ? { p: p.id } : {}, data)); };
+  const nickOf = p => Board.nick(p.id, p.nickSeed);
+  const activeOf = p => (p.stats.active != null ? p.stats.active : Math.round((p.stats.ms || 0) / 1000));
+  const weekOf = p => { const id = Board.weekId(new Date()); return p.week && p.week.id === id ? p.week : { id, pts: 0, secs: 0, q: 0, mst: 0 }; };
+  // Read-only counts (gradeState/skillState would write defaults into a sibling's record and make it look newer)
+  const masteredCount = p => Object.values(p.grades || {}).reduce((a, gs) => a + Object.values(gs.skills || {}).filter(ss => ss.mastered).length, 0);
+  const peekPct = (p, g) => { const gs = (p.grades || {})[g], list = skillsOf(g); return gs && list.length ? Math.round(list.filter(s => (gs.skills[s.id] || {}).mastered).length / list.length * 100) : 0; };
+  function boardDoc(p) {
+    if (p.board === 'hidden') return { pid: p.id, hid: true, t: Date.now() };
+    const w = weekOf(p);
+    return {
+      pid: p.id, nick: p.board === 'name' ? p.name : nickOf(p), av: p.avatar, hat: p.hat || '', g: p.grade,
+      pts: Math.round(p.brain), min: Math.round(activeOf(p) / 60), mst: masteredCount(p),
+      str: liveStreak(p), frz: freezesOf(p), day: p.streak.last || '',
+      q: p.stats.answered, acc: p.stats.answered ? Math.round(p.stats.first / p.stats.answered * 100) : 0,
+      wk: w.id, wpts: Math.round(w.pts), wmin: Math.round(w.secs / 60), wq: w.q, wmst: w.mst, v: BUILD, t: Date.now(),
+    };
+  }
+  const boardPut = p => { if (p && Online.has('leaderboard')) Online.boardPut(boardDoc(p)); };
+  // What the reminder sender needs about the children on this device (no names). last = the last day the
+  // daily goal was met, so a child who started but didn't finish today's goal still gets a nudge.
+  const pushKids = () => state.profiles.map(p => {
+    const gs = (p.grades || {})[p.grade], w = gs && gs.wishes.find(x => x.status === 'locked' && x.text.trim());
+    return { av: p.avatar, str: liveStreak(p), frz: freezesOf(p), last: p.streak.last || '', wish: w ? Math.max(0, w.at - peekPct(p, p.grade)) : -1 };
+  });
+  const refreshView = () => { S.keepScroll = true; render(); S.keepScroll = false; };
 
   // ---------- Rewards: quests, trophies, streaks, wishes ----------
   const toast = msg => {
@@ -848,7 +886,7 @@
   function checkWishes(p, g) {
     const gs = gradeState(p, g), { pct } = gradeProgress(p, g), out = [];
     for (const w of gs.wishes) {
-      if (pct >= w.at && w.status === 'locked' && w.text.trim()) { w.status = 'unlocked'; w.unlockedAt = Date.now(); out.push(w); }
+      if (pct >= w.at && w.status === 'locked' && w.text.trim()) { w.status = 'unlocked'; w.unlockedAt = Date.now(); out.push(w); stat('wish', { g, n: w.at }, p); }
     }
     return out;
   }
@@ -939,7 +977,7 @@
     if (S.screen === 'problem') return renderProblem();
     if (S.screen === 'album') return renderAlbum();
     renderChrome();
-    ({ play: renderPlay, wishes: renderWishes, me: renderMe, parent: renderParent })[S.tab]();
+    ({ play: renderPlay, wishes: renderWishes, me: renderMe, top: renderTop, parent: renderParent })[S.tab]();
     view.scrollTop = S.keepScroll ? view.scrollTop : 0;
   }
 
@@ -957,7 +995,9 @@
       ${Sync.chip()}
       <button class="iconbtn" data-act="mute" aria-label="${muted ? 'Turn sound on' : 'Turn sound off'}">${muted ? '🔇' : '🔊'}</button>`;
     const t = theme(), unlocked = GRADES.reduce((a, g) => a + gradeState(p, g).wishes.filter(w => w.status === 'unlocked').length, 0) + (p.streakWishes || []).filter(w => w.status === 'unlocked').length;
-    tabsEl.innerHTML = [['play', t.emoji, 'Play'], ['wishes', '🎁', 'Wishes' + (unlocked ? ` (${unlocked})` : '')], ['me', '🏆', 'Me'], ['parent', '🔒', 'Parents']]
+    if (S.tab === 'top' && !Online.has('leaderboard')) S.tab = 'play';
+    tabsEl.innerHTML = [['play', t.emoji, 'Play'], ['wishes', '🎁', 'Wishes' + (unlocked ? ` (${unlocked})` : '')], ['me', '🏆', 'Me'],
+      ...(Online.has('leaderboard') ? [['top', '🏅', 'Top']] : []), ['parent', '🔒', 'Parents']]
       .map(([id, ic, lb]) => `<button class="tab ${S.tab === id ? 'on' : ''}" data-act="tab" data-id="${id}"><span class="ti">${ic}</span>${lb}</button>`).join('');
   }
 
@@ -1073,7 +1113,8 @@
       <div class="card stack">
         <div class="hero">${ring(prog.pct)}<div class="stack" style="gap:8px;min-width:0">
           <div class="mascot"><div class="face" style="font-size:2.4rem">${t.mascot}</div><div class="bubble">${msg}</div></div>
-          <div class="muted" style="font-size:.9rem">${prog.mastered} of ${prog.total} skills mastered</div></div></div>
+          <div class="muted" style="font-size:.9rem">${prog.mastered} of ${prog.total} skills mastered</div>
+          <div class="daily">💡 ${h(PMLM_REMINDERS.daily(today()))}</div></div></div>
         ${next ? `<button class="btn primary block pulse" data-act="skill" data-id="${next.id}">${t.go} ${h(next.icon)} ${h(next.title)}</button>` : ''}
         <div class="grid2">
           <button class="btn small" data-act="fixit" ${gs.review.length ? '' : 'disabled'}>🔧 Fix-it (${gs.review.length})</button>
@@ -1235,6 +1276,17 @@
     const msg = String((e && (e.stack || e.message)) || e).slice(0, 500);
     console.warn('Question failed', skill, level, e);
     p.diag = (p.diag || []).slice(-9).concat([{ t: Date.now(), skill, level, msg, ua: navigator.userAgent.slice(0, 200), v: BUILD }]);
+    stat('problem', { g: (R && R.grade) || p.grade, sk: skill, n: level, msg }, p);
+  }
+
+  // The 🚩 button: report a question that looks wrong or confusing (not during the 60-second challenge)
+  const flagBtn = () => (Online.has('feedback') && R && R.mode !== 'extra' ? '<button class="btn small ghost" data-act="flag" aria-label="Report a problem with this question">🚩</button>' : '');
+  function answerGiven() {
+    const i = R.inp, q = R.q;
+    if (q.kind === 'choice') return [...R.wrongChoices, i.choice].filter(Boolean).map(c => Rich.plain(c)).join(' | ');
+    if (q.kind === 'coord') return `(${i.x}, ${i.y})`;
+    if (q.kind === 'fraction') return `${i.w ? i.w + ' ' : ''}${i.n}/${i.d}`;
+    return i.a;
   }
 
   function startRound(mode, opts = {}) {
@@ -1264,6 +1316,7 @@
     R = {
       mode, grade: g, skill: opts.skill, unit: opts.unit, items, i: -1, results: [], combo: 0, bestCombo: 0, brain: 0, coins: 0,
       start: Date.now(), hp: 8, hpMax: 8, placed: [], ended: false, deadline: mode === 'extra' ? Date.now() + 60000 : 0, extraN: 0, stars0: totalStars(gs),
+      answered0: p.stats.answered,
     };
     S.screen = 'round';
     Sfx.unlock(); Sfx.setTier(0); World.setEnergy(0);
@@ -1319,7 +1372,7 @@
       <div id="help" class="stack" style="gap:8px"></div>
       <div class="feedback" id="fb" aria-live="polite"></div>
       <div id="pad"></div>
-      <div class="row between" id="tools">${R.mode === 'place' || R.mode === 'extra' ? '<span></span>' : '<button class="btn small ghost" data-act="hint">💡 Hint</button>'}<span class="muted" style="font-size:.85rem">${R.mode === 'extra' ? `<b class="num" id="xn">${R.extraN}</b> right` : `Question ${R.i + 1} of ${R.items.length}`}</span></div>
+      <div class="row between" id="tools"><span class="row" style="gap:8px">${R.mode === 'place' || R.mode === 'extra' ? '' : '<button class="btn small ghost" data-act="hint">💡 Hint</button>'}${flagBtn()}</span><span class="muted" style="font-size:.85rem">${R.mode === 'extra' ? `<b class="num" id="xn">${R.extraN}</b> right` : `Question ${R.i + 1} of ${R.items.length}`}</span></div>
     </div>`;
     drawAnswer(); drawPad();
     if (R.mode === 'extra') R.timerId = setInterval(() => {
@@ -1529,7 +1582,7 @@
     if (!withNext) return;
     const pad = $('#pad'), btn = '<button class="btn go block" data-act="next" style="margin-top:12px">Next ▶</button>';
     if (R.q.kind === 'choice') pad.insertAdjacentHTML('beforeend', btn); else pad.innerHTML = btn;
-    $('#tools').innerHTML = '';
+    $('#tools').innerHTML = flagBtn();
     pad.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
@@ -1546,8 +1599,12 @@
     if (!answered && R.failed) { S.screen = 'problem'; save(); return render(); }
     if (R.mode === 'try') {
       skillState(gs, R.skill).lesson = true; quest('lesson');
-      S.screen = 'trydone'; save(); checkTrophies(p); return render();
+      S.screen = 'trydone'; save(); checkTrophies(p); stat('lesson', { g: R.grade, sk: R.skill }, p); return render();
     }
+    // Leaderboard totals: active minutes (idle time doesn't count) and this week's numbers
+    const secs = Board.activeSecs(Date.now() - R.start, answered), wk = weekOf(p);
+    p.stats.active = activeOf(p) + secs;
+    p.week = Object.assign(wk, { pts: wk.pts + Math.round(R.brain), secs: wk.secs + secs, q: wk.q + (p.stats.answered - R.answered0), mst: wk.mst + (R.newMastered || []).length });
     p.stats.ms += Date.now() - R.start;
     if (R.mode === 'practice') {
       const ss = skillState(gs, R.skill), before = ss.stars;
@@ -1581,6 +1638,9 @@
     R.summary.wishes = checkWishes(p, R.grade);
     R.summary.trophies = checkTrophies(p);
     save();
+    stat(R.mode === 'place' ? 'place' : 'round', { g: R.grade, sk: R.skill || R.unit || '', mode: R.mode, n: answered, ok, secs, m: (R.newMastered || []).length }, p);
+    boardPut(p);
+    if (Online.push.state.on) Online.push.update(pushKids());
     S.screen = 'results';
     render();
     setTimeout(() => celebrateQueue(R.summary), 900);
@@ -1712,6 +1772,105 @@
     </div>`;
   }
 
+  // ----- Top tab (leaderboard) -----
+  function renderTop() {
+    const p = P(), o = S.lb || (S.lb = { period: 'week', metric: 'pts', grade: 0 }), c = Online.boardCache;
+    if (!c || Date.now() - c.at > 300000) Online.boardList().then(() => { if (S.tab === 'top' && S.screen === 'home') refreshView(); });
+    // This device's own players always show their latest numbers, even before the server has them
+    const docs = ((c && c.docs) || []).concat(state.profiles.map(boardDoc));
+    const rows = Board.rows(docs, { period: o.period, metric: o.metric, grade: o.grade, week: Board.weekId(new Date()), today: Board.dayOf(new Date()) });
+    const m = Board.METRICS[o.metric];
+    // The child always sees their own row: ranked, or "–" until they score in this view
+    const mine = rows.find(r => r.pid === p.id)
+      || (p.board !== 'hidden' && (!o.grade || o.grade === p.grade) ? Object.assign(boardDoc(p), { rank: '–', value: null }) : null);
+    const row = r => `<li class="lbrow ${r.pid === p.id ? 'me' : ''}"><span class="lbrank">${r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : r.rank}</span>
+      <span class="lbav">${r.hat ? `<span class="hat">${h(r.hat)}</span>` : ''}${h(r.av || '🙂')}</span>
+      <span class="lbname"><b>${h(r.nick || 'Player')}</b><small class="muted">${r.pid === p.id ? 'You · ' : ''}Grade ${h(r.g)}</small></span>
+      <b class="lbval num">${r.value == null ? '–' : o.metric === 'acc' ? r.value + '%' : fmt(r.value)}</b></li>`;
+    const note = !c ? '<p class="muted center">Loading the leaderboard…</p>'
+      : c.error ? `<p class="muted center">${c.error === 'offline' ? 'You are offline, so only this device’s players show.' : 'The leaderboard could not be reached, so only this device’s players show.'} Tap ↻ to try again.</p>` : '';
+    const top = rows.slice(0, 50), pinned = mine && !top.includes(mine);
+    const empty = top.length ? '' : `<p class="muted center">${o.period === 'week' ? 'Nobody is on this week’s board yet.' : 'Nobody is on the board yet.'} Play a round to be first!</p>`;
+    const hint = mine && mine.value == null ? `<p class="muted center" style="font-size:.85rem">${m.min && p.stats.answered < m.min ? `Answer ${m.min - p.stats.answered} more questions to get a first-try %.` : 'Get answers right in a round to climb the board!'}</p>` : '';
+    const list = `${empty}${top.length ? `<ol class="lb">${top.map(row).join('')}</ol>` : ''}${pinned ? `<ol class="lb">${row(mine)}</ol>${hint}` : ''}`;
+    view.innerHTML = `<div class="stack">
+      <div class="row between"><h2>🏅 Leaderboard</h2><button class="iconbtn" data-act="lbrefresh" aria-label="Refresh the leaderboard">↻</button></div>
+      <div class="card row between" style="gap:10px">${p.board === 'hidden' ? `<span class="muted">A grown-up has hidden ${h(p.name)} from the leaderboard.</span>`
+        : `<span>You appear as <b>${h(p.avatar)} ${h(p.board === 'name' ? p.name : nickOf(p))}</b></span>${p.board === 'name' ? '' : '<button class="btn small ghost" data-act="reroll">🎲 New name</button>'}`}</div>
+      <div class="seg">${[['week', 'This week'], ['all', 'All time']].map(([v, l]) => `<button class="${o.period === v ? 'on' : ''}" data-act="lbperiod" data-v="${v}">${l}</button>`).join('')}</div>
+      <div class="seg wrap" role="group" aria-label="Rank by">${Object.entries(Board.METRICS).map(([k, x]) => `<button class="${o.metric === k ? 'on' : ''}" data-act="lbmetric" data-v="${k}">${x.icon} ${x.label}</button>`).join('')}</div>
+      <div class="field"><label for="lbgrade">Grade</label><select id="lbgrade" data-change="lbgrade">${[0, ...GRADES].map(g => `<option value="${g}" ${o.grade === g ? 'selected' : ''}>${g ? 'Grade ' + g : 'All grades'}</option>`).join('')}</select></div>
+      ${note}${list}
+      <p class="muted center" style="font-size:.85rem">${o.period === 'week' ? 'The weekly board starts fresh every Monday. ' : ''}${m.min ? `First-try % counts players with at least ${m.min} questions. ` : ''}Minutes count active play only.</p>
+    </div>`;
+  }
+
+  // ----- Parent area cards for the family test -----
+  function installCard() {
+    const I = Online.install;
+    if (IN_ARTIFACT) return '';
+    const why = '<p class="muted" style="font-size:.9rem">An icon on the Home Screen opens the game like an app, so children find it faster and come back more often.</p>';
+    let body;
+    if (I.standalone) body = '<p>✅ The game is on this device’s Home Screen.</p>';
+    else if (I.canPrompt) body = `${why}<button class="btn small primary" data-act="install">📲 Install the game</button>`;
+    else if (I.platform === 'ios') body = `${why}<ol class="steps"><li>Open this page in <b>Safari</b>.</li><li>Tap the <b>Share</b> button (the square with an arrow ⬆️).</li><li>Choose <b>Add to Home Screen</b>, then <b>Add</b>.</li></ol>
+      <p class="muted" style="font-size:.85rem">On iPhone and iPad this also keeps progress safe: Safari can clear a website’s data after a week without a visit, but not an app on the Home Screen. Daily reminders need it too.</p>`;
+    else body = `${why}<p style="font-size:.95rem">Open the browser menu (⋮ or ☰) and choose <b>Install app</b> or <b>Add to Home screen</b>.</p>`;
+    return `<div class="card stack" id="installcard"><h3>📲 Home Screen</h3>${body}</div>`;
+  }
+  function reminderCard() {
+    const PU = Online.push;
+    if (!PU.configured) return '';
+    const st = PU.state, hours = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+    const pick = attrs => `<div class="field"><label for="remhour">Time</label><select id="remhour" ${attrs}>${hours.map(x => `<option value="${x}" ${x === st.hour ? 'selected' : ''}>${String(x).padStart(2, '0')}:00</option>`).join('')}</select></div>`;
+    let body;
+    if (!PU.supported && PU.needsHomeScreen) body = '<p class="muted" style="font-size:.9rem">On iPhone and iPad, reminders work once the game is on the Home Screen (see above). Open it from the Home Screen, then turn them on here.</p>';
+    else if (!PU.supported) body = '<p class="muted" style="font-size:.9rem">This browser can’t show reminders. Try Chrome or Safari, or the game on the Home Screen.</p>';
+    else if (st.on) body = `<p style="font-size:.95rem">🔔 On for this device: a friendly nudge at <b>${String(st.hour).padStart(2, '0')}:00</b> on days nobody here has played yet. Never more than one a day.</p>
+      ${pick('data-change="remhour"')}<div class="grid2"><button class="btn small" data-act="remsample">Show a sample</button><button class="btn small ghost" data-act="remoff">Turn off</button></div>`;
+    else body = `<p class="muted" style="font-size:.9rem">A short, motivating message on days nobody on this device has played yet, like Duolingo. At most one a day, and it backs off if the game isn’t being played.</p>
+      ${pick('')}<button class="btn small primary" data-act="remon">🔔 Turn on reminders</button>`;
+    return `<div class="card stack" id="remcard"><h3>🔔 Daily reminder</h3>${body}</div>`;
+  }
+  function feedbackCard() {
+    if (!Online.has('feedback')) return '';
+    return `<div class="card stack" id="fbcard"><h3>💬 Tell us what you think</h3>
+      <p class="muted" style="font-size:.9rem">What do the children enjoy? What is confusing or broken? Every message is read.</p>
+      <div class="field"><label for="fbtext">Your message</label><textarea id="fbtext" class="prose" maxlength="1000"></textarea></div>
+      <div class="field"><label for="fbname">Your name <span class="muted" style="font-weight:400">(optional, so we can thank you)</span></label><input id="fbname" maxlength="40" autocomplete="name"></div>
+      <button class="btn small primary" data-act="sendfb">Send</button></div>`;
+  }
+  function aboutCard() {
+    if (!Online.enabled) return '';
+    return `<div class="card stack"><h3>ℹ️ About this test</h3>
+      <p style="font-size:.95rem">Thank you for trying Play More Learn More! While we test it with friends and family:</p>
+      <ul class="plain">
+        ${Online.has('stats') ? '<li>📊 The game sends <b>anonymous</b> play stats: grade, rounds, minutes and skills mastered. No names, no emails and nothing from backups. You can switch this off under Settings.</li>' : ''}
+        ${Online.has('leaderboard') ? '<li>🏅 On the leaderboard each child appears with a fun nickname. Under Players you can show the first name instead, or hide them.</li>' : ''}
+        ${Online.push.configured ? '<li>🔔 Daily reminders are off unless you turn them on.</li>' : ''}
+        <li>☁️ Family accounts are optional. They keep progress online, visible only to your family.</li>
+        ${Online.has('feedback') ? '<li>💬 Tell us what you think above, or tap 🚩 on any question that looks wrong.</li>' : ''}
+      </ul>
+      <p class="muted" style="font-size:.85rem">Game version ${h(BUILD)}</p></div>`;
+  }
+  // First player on a new device: point grown-ups at the PIN, wishes, Home Screen and reminders
+  function quickStart() {
+    const p = P();
+    if (!p || document.querySelector('.overlay, .celebrate')) return;
+    const steps = [
+      ['🔒 Set a parent PIN', 'so wishes and settings stay for grown-ups.'],
+      ['🎁 Add a wish', `a treat ${h(p.name)} earns by mastering skills.`],
+      ...(Online.install.standalone || IN_ARTIFACT ? [] : [['📲 Put the game on the Home Screen', 'so it opens like an app.']]),
+      ...(Online.push.configured ? [['🔔 Turn on a daily reminder', 'a friendly nudge on days nobody has played.']] : []),
+    ];
+    openSheet(`<div class="stack">
+      <div class="row between"><h2>👋 Grown-ups: 1-minute setup</h2><button class="iconbtn" data-act="close" aria-label="Close">✕</button></div>
+      <p class="muted">A few quick things help ${h(p.name)} come back every day.</p>
+      <ol class="steps">${steps.map(([t, s]) => `<li><b>${t}</b><span class="muted">${s}</span></li>`).join('')}</ol>
+      <button class="btn primary block" data-act="qsgo">Set up now</button>
+      <button class="btn ghost block" data-act="close">Later</button></div>`, true);
+  }
+
   // ----- Parent area -----
   // ----- Sticker album: a page per unit (a sticker for each mastered skill) and a lucky page from the chest -----
   function renderAlbum() {
@@ -1805,7 +1964,7 @@
       <div class="grid2"><div class="field"><label for="ps-player">Player</label><select id="ps-player" data-change="psel">${state.profiles.map(x => sOpt(x.id, sel.player, x.name)).join('')}</select></div>
         <div class="field"><label for="ps-grade">Grade</label><select id="ps-grade" data-change="psel">${GRADES.map(g => sOpt(g, sel.grade, 'Grade ' + g)).join('')}</select></div></div>
 
-      <div class="card stack"><h3>🎁 Wishes for ${h(who.name)} · Grade ${sel.grade}</h3>
+      <div class="card stack" id="wishcard"><h3>🎁 Wishes for ${h(who.name)} · Grade ${sel.grade}</h3>
         <p class="muted" style="font-size:.9rem">Small wishes unlock at 25%, 50% and 75% of the grade's skills mastered. The big wish unlocks at 100%. A skill counts as mastered after 8 of the last 10 answers are right first time, on 2 different days.</p>
         ${gs.wishes.map((w, i) => `<div class="stack" style="gap:6px">
           <div class="wishedit"><div class="field"><label for="we-${i}">${w.at === 100 ? 'Big' : w.at + '%'}</label><input id="we-${i}" maxlength="4" value="${h(w.emoji)}" style="text-align:center;font-size:1.4rem"></div>
@@ -1836,20 +1995,28 @@
       <div class="card stack"><h3>👧 Players</h3>
         ${state.profiles.map(x => `<div class="row between"><span style="font-weight:700">${h(x.avatar)} ${h(x.name)} · Grade ${x.grade}</span>
           <span class="row" style="gap:6px"><select aria-label="Grade for ${h(x.name)}" data-change="pgrade" data-id="${x.id}" style="min-height:40px;border-radius:12px;border:0;background:var(--panel2);padding:0 8px">${GRADES.map(g => sOpt(g, x.grade, 'Grade ' + g)).join('')}</select>
-          <button class="btn small ghost" data-act="delplayer" data-id="${x.id}">Delete</button></span></div>`).join('')}
+          <button class="btn small ghost" data-act="delplayer" data-id="${x.id}">Delete</button></span></div>
+          ${Online.has('leaderboard') ? `<div class="row" style="gap:8px;font-size:.9rem"><span class="muted">🏅 On the leaderboard:</span><select aria-label="How ${h(x.name)} appears on the leaderboard" data-change="pboard" data-id="${x.id}" style="min-height:40px;border-radius:12px;border:0;background:var(--panel2);padding:0 8px;min-width:0;max-width:100%">${[['nick', 'Nickname: ' + nickOf(x)], ['name', 'First name: ' + x.name], ['hidden', 'Hidden']].map(([v, l]) => sOpt(v, x.board || 'nick', l)).join('')}</select></div>` : ''}`).join('')}
         <button class="btn small" data-act="newplayer">+ Add a player</button>
         ${cbFrom ? `<div class="stack" style="gap:6px;margin-top:8px"><span class="eyebrow">Same child twice?</span>
           <div class="grid2"><div class="field"><label for="cb-keep">Keep</label><select id="cb-keep">${state.profiles.map(x => sOpt(x.id, cbKeep.id, label(x))).join('')}</select></div>
           <div class="field"><label for="cb-from">Add progress from</label><select id="cb-from">${state.profiles.map(x => sOpt(x.id, cbFrom.id, label(x))).join('')}</select></div></div>
           <button class="btn small ghost" data-act="combine">Combine players</button></div>` : ''}</div>
 
+      ${installCard()}
+      ${reminderCard()}
+
       <div class="card stack" style="gap:4px"><h3>⚙️ Settings</h3>
+        ${Online.has('stats') ? `<label class="toggle"><span>Share anonymous play stats <span class="muted" style="font-weight:400">(no names; it helps us improve the game)</span></span><input type="checkbox" data-change="set" data-k="stats" ${state.settings.stats !== false ? 'checked' : ''}></label>` : ''}
         <label class="toggle">Sound effects <input type="checkbox" data-change="set" data-k="sfx" ${state.settings.sfx ? 'checked' : ''}></label>
         <label class="toggle">Music during rounds <input type="checkbox" data-change="set" data-k="music" ${state.settings.music ? 'checked' : ''}></label>
         <label class="toggle"><span>Speed bonus <span class="muted" style="font-weight:400">(a timer bar; fast answers earn extra brain power, nothing is lost)</span></span><input type="checkbox" data-change="set" data-k="timer" ${state.settings.timer ? 'checked' : ''}></label>
         <div class="field" style="margin-top:8px"><label for="dgoal">Daily goal <span class="muted" style="font-weight:400">(full rounds a day to keep the streak and open the chest; for the whole family)</span></label><select id="dgoal" data-change="dailygoal">${[1, 2, 3].map(n => sOpt(n, dailyGoal(), n === 1 ? '1 round a day' : n + ' rounds a day')).join('')}</select></div>
         <div class="field" style="margin-top:8px"><label for="keysound">Button sound <span class="muted" style="font-weight:400">(on this device)</span></label><select id="keysound" data-change="keysound">${[['clicky', 'Clicky: crisp mechanical keyboard'], ['thocky', 'Thocky: deep, soft keyboard'], ['off', 'Off']].map(([v, l]) => sOpt(v, state.settings.keySound || 'clicky', l)).join('')}</select></div>
         <div class="field" style="margin-top:8px"><label for="cur">Money symbol</label><select id="cur" data-change="currency">${['₼', '$', '£', '€', '₽', '₺', '₹'].map(c => sOpt(c, state.settings.currency, c.trim())).join('')}</select></div></div>
+
+      ${feedbackCard()}
+      ${aboutCard()}
 
       ${Sync.isParent ? '' : Sync.card()}
 
@@ -1865,6 +2032,8 @@
         <div class="row"><button class="btn small" data-act="dbgplay">Play a perfect round</button><button class="btn small" data-act="dbgday">Next day ⏭</button><button class="btn small ghost" data-act="dbgday0">Reset days</button><span class="muted">Game date ${today()}</span></div></div>` : ''}
       <p class="muted center" style="font-size:.8rem">Game version ${h(BUILD)}</p>
     </div>`;
+    // After the grown-up quick start: open at the wishes
+    if (S.scrollTo) { const id = S.scrollTo; S.scrollTo = null; setTimeout(() => { const el = document.getElementById(id); if (el) el.scrollIntoView({ block: 'start' }); }, 60); }
   }
 
   function renderPin() {
@@ -1928,7 +2097,10 @@
       state.profiles.push(p); state.current = p.id; S = { screen: 'home', tab: 'play' };
       save(); Sfx.unlock(); render();
       setTimeout(() => { FX.burst(innerWidth / 2, innerHeight / 3, 20); Sfx.fanfare(); }, 200);
+      stat('player', { g: p.grade }, p);
+      if (state.profiles.length === 1 && !state.pin && !Sync.isParent) setTimeout(quickStart, 1400);
     },
+    qsgo: () => { closeSheet(); S.tab = 'parent'; S.screen = 'home'; S.scrollTo = 'wishcard'; render(); },
     grade: d => { P().grade = +d.id; save(); render(); },
     skill: d => skillSheet(d.id),
     learn: d => { closeSheet(); S.screen = 'lesson'; S.skill = d.id; S.card = 0; render(); },
@@ -1989,6 +2161,8 @@
       const fresh = checkWishes(who, S.pSel.grade);
       save(); S.keepScroll = true; render(); S.keepScroll = false;
       toast(fresh.length ? `Saved. ${fresh.length} wish${fresh.length > 1 ? 'es' : ''} already unlocked!` : 'Wishes saved');
+      stat('wishset', { g: S.pSel.grade, n: gs.wishes.filter(w => w.text.trim()).length }, who);
+      if (Online.push.state.on) Online.push.update(pushKids());
     },
     grant: d => { const gs = gradeState(state.profiles.find(x => x.id === S.pSel.player), S.pSel.grade); gs.wishes[+d.i].status = 'granted'; gs.wishes[+d.i].grantedAt = Date.now(); save(); S.keepScroll = true; render(); S.keepScroll = false; FX.party(); },
     ungrant: d => { const gs = gradeState(state.profiles.find(x => x.id === S.pSel.player), S.pSel.grade); gs.wishes[+d.i].status = 'unlocked'; save(); S.keepScroll = true; render(); S.keepScroll = false; },
@@ -2041,6 +2215,7 @@
     dupyes: () => Sync.resolveDupe(true),
     dupno: () => Sync.resolveDupe(false),
     delok: d => {
+      if (Online.has('leaderboard')) Online.boardPut({ pid: d.id, hid: true, t: Date.now() });
       state.deleted = Object.assign({}, state.deleted, { [d.id]: Date.now() });
       state.profiles = state.profiles.filter(q => q.id !== d.id);
       if (state.current === d.id) state.current = state.profiles[0] ? state.profiles[0].id : null;
@@ -2112,6 +2287,46 @@
       toast(`${added} player(s) added${updated ? `, ${updated} updated` : ''}.` + (twice ? ` There are now two players called ${h(twice.name)}: use "Same child twice?" under Players to combine them.` : ''));
     },
     importok: () => { const s = S.pendingImport; if (!s) return; state = Object.assign(DEFAULT(), s); S = { screen: 'home', tab: 'play' }; closeSheet(); save(); render(); toast('Backup loaded'); },
+    // 🚩 Report a question. If the next question was about to come up, show the explanation and a Next button instead.
+    flag: () => {
+      if (!R || !R.q) return;
+      if (R.done && R.autoNext) { clearTimeout(R.autoNext); R.autoNext = 0; showExplain(true); }
+      openSheet(`<div class="stack"><div class="row between"><h2>🚩 What’s wrong?</h2><button class="iconbtn" data-act="close" aria-label="Close">✕</button></div>
+        <p class="muted">Thank you! This goes to the people who make the game.</p>
+        ${[['wrong', '🤔 The answer looks wrong'], ['hard', '😵 It’s too hard'], ['confusing', '❓ I don’t understand the question'], ['picture', '🖼️ The picture is broken'], ['other', '💬 Something else']]
+          .map(([r, l]) => `<button class="btn block" data-act="flaggo" data-r="${r}" style="justify-content:flex-start">${l}</button>`).join('')}</div>`);
+    },
+    flaggo: d => {
+      if (!R || !R.q) return closeSheet();
+      const ss = skillState(gradeState(P(), R.grade), R.sk.id);
+      Online.feedback({ kind: 'question', reason: d.r, p: P().id, g: R.grade, sk: R.sk.id, lvl: (R.item && R.item.level) || ss.level || 1, mode: R.mode,
+        q: Rich.plain(R.q.q).slice(0, 300), ans: Rich.plain(String(answerText(R.q))).slice(0, 80), inp: answerGiven().slice(0, 80) });
+      closeSheet(); toast('Thank you! We will check this question. 🚩');
+    },
+    sendfb: () => {
+      const text = ($('#fbtext').value || '').trim(), name = ($('#fbname').value || '').trim();
+      if (!text) { $('#fbtext').focus(); toast('Write a few words first'); return; }
+      Online.feedback({ kind: 'general', text: text.slice(0, 1000), name: name.slice(0, 40) });
+      $('#fbtext').value = ''; toast('Thank you! Your message was sent. 💬');
+    },
+    lbperiod: d => { S.lb.period = d.v; refreshView(); },
+    lbmetric: d => { S.lb.metric = d.v; refreshView(); },
+    lbrefresh: () => { toast('Refreshing…'); Online.boardList(true).then(() => { if (S.tab === 'top') refreshView(); }); },
+    reroll: () => { const p = P(); p.nickSeed = (p.nickSeed || 0) + 1; save(); boardPut(p); refreshView(); Sfx.coin(); },
+    install: () => {
+      if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+      Online.install.prompt().then(ok => { if (ok) toast('Installed! Find Play More on the Home Screen. 📲'); refreshView(); });
+    },
+    remon: d => {
+      const hour = +$('#remhour').value;
+      if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+      Online.push.enable(hour, pushKids()).then(() => { toast('Daily reminder is on 🔔'); refreshView(); }, e => toast(h((e && e.userMessage) || 'Could not turn on reminders. Check the internet and try again.')));
+    },
+    remoff: () => { Online.push.disable().then(() => { toast('Reminders are off'); refreshView(); }); refreshView(); },
+    remsample: () => {
+      const m = PMLM_REMINDERS.M.growth[Math.floor(Math.random() * PMLM_REMINDERS.M.growth.length)];
+      Online.push.sample(m[0], m[1]).catch(e => toast(h((e && e.userMessage) || 'Could not show a notification.')));
+    },
     dbg: d => {
       const who = state.profiles.find(x => x.id === S.pSel.player), g = S.pSel.grade, gs = gradeState(who, g), list = skillsOf(g), k = Math.ceil(list.length * +d.v / 100);
       list.forEach((s, i) => { const ss = skillState(gs, s.id); if (i < k) { ss.mastered = Date.now(); ss.stars = 3; ss.lesson = true; ss.last = Date.now(); } });
@@ -2214,6 +2429,9 @@
     wk: (d, el) => { S.wk = +el.value; S.keepScroll = true; render(); S.keepScroll = false; },
     keysound: (d, el) => { state.settings.keySound = el.value; save(); applyTheme(); Sfx.key('key', 'down'); setTimeout(() => Sfx.key('key', 'up'), 90); },
     importfile: (d, el) => { const f = el.files && el.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => importCode(String(r.result)); r.readAsText(f); },
+    lbgrade: (d, el) => { S.lb.grade = +el.value; refreshView(); },
+    pboard: (d, el) => { const x = state.profiles.find(q => q.id === d.id); x.board = el.value; save(); boardPut(x); refreshView(); toast(el.value === 'hidden' ? `${h(x.name)} is hidden from the leaderboard` : 'Leaderboard name saved'); },
+    remhour: (d, el) => { Online.push.update(pushKids(), +el.value); refreshView(); toast('Reminder time saved'); },
   };
 
   document.addEventListener('click', e => {
@@ -2290,6 +2508,11 @@
   if (SELFTEST) { selfTest(); return; }
   if (DEBUG) window.__pmlm = { get state() { return state; }, get R() { return R; }, ACT, today, render };
   Sync.boot();
+  Online.boot({ build: BUILD, onChange: () => {
+    const typing = document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+    if (S.tab === 'parent' && S.screen === 'home' && !typing && !document.querySelector('.overlay')) refreshView();
+  } });
+  if (Online.firstToday()) stat('open', { n: state.profiles.length });
   render();
   Cloud.init(remote => {
     if (remote && remote.v === 1 && (remote.updatedAt || 0) > (state.updatedAt || 0)) {

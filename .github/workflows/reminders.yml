@@ -1,0 +1,41 @@
+# Daily reminders: every hour, tools/admin/send-reminders.mjs sends each device that asked for one its message,
+# at most once a day at the time a grown-up chose (rules in src/reminders.js). Until the secrets are set
+# (README → Daily reminders) it does nothing and stays green.
+# GitHub pauses scheduled jobs after 60 days without any change to the repository; re-enable it under Actions.
+name: Daily reminders
+on:
+  schedule:
+    - cron: '5 * * * *'
+  workflow_dispatch:
+    inputs:
+      only:
+        description: Send a test reminder to one device now (its id from the push collection)
+        required: false
+      dry_run:
+        description: Only list who would get which message
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: reminders
+  cancel-in-progress: false
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --no-audit --no-fund
+        working-directory: tools/admin
+      - name: Send
+        working-directory: tools/admin
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          ONLY: ${{ inputs.only }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: node send-reminders.mjs ${ONLY:+--only "$ONLY"} $([ "$DRY_RUN" = "true" ] && echo --dry-run)

@@ -5,3 +5,8 @@ __pycache__/
 tools/rules-test/node_modules/
 *.log
 CLAUDE.local.md
+tests/node_modules/
+tests/test-results/
+tests/playwright-report/
+tests/.cache/
+tools/admin/node_modules/
