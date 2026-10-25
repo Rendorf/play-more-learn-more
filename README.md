@@ -62,7 +62,7 @@ Without a Firebase project, progress stays in each device's browser, and backup 
 4. **Firestore Database:** create a database in production mode. On the **Rules** tab, paste the whole of [`firestore.rules`](firestore.rules) and publish.
 5. **Project settings → Your apps:** add a Web app, copy its `firebaseConfig`, paste it into `src/config.js` as `PMLM_FIREBASE`, then rebuild and push.
 
-The web config is public by design. The rules make sure only a family's parents and linked devices can read or write that family's data, link codes expire (15 minutes for devices, 24 hours for parent invites), and codes can't be listed or guessed in bulk.
+The web config is public by design. The rules make sure only a family's parents and linked devices can read or write that family's data, link codes expire (30 minutes for devices, 24 hours for parent invites, timed by the server so a wrong device clock does not matter), and codes can't be listed or guessed in bulk.
 
 ### Testing the rules
 

@@ -5,6 +5,7 @@ Writes:
   index.html            full document, works offline; GitHub Pages serves it
   build/artifact.html   page content only, for publishing as a claude.ai Artifact
 """
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -17,13 +18,14 @@ ORDER = ["config.js", "util.js", "registry.js", "validate.js",
 def main():
     shell = (SRC / "shell.html").read_text(encoding="utf-8")
     head, body = shell.split("<!--BODY-->")
+    build = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     scripts = []
     for name in ORDER:
         path = SRC / name
         if not path.exists():
             print(f"  (skipping missing {name})")
             continue
-        code = path.read_text(encoding="utf-8").replace("</script", "<\\/script")
+        code = path.read_text(encoding="utf-8").replace("</script", "<\\/script").replace("__BUILD__", build)
         scripts.append(f"<script>/* {name} */\n{code}\n</script>")
     body = body.replace("<!--SCRIPTS-->", "\n".join(scripts))
 

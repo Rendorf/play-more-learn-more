@@ -26495,6 +26495,7 @@ const Sfx = (() => {
     <div class="row between"><span class="eyebrow">Grade</span><span class="muted" style="font-size:.85rem">Cambridge ${stageName(g)}</span></div>
     <div class="gradepick" role="tablist" aria-label="Grade">${GRADES.map(x => `<button class="${x === g ? 'on' : ''}" data-act="${act}" ${extra} data-id="${x}" data-v="${x}" aria-label="Grade ${x}">${x}</button>`).join('')}</div></div>`;
   const STORE_KEY = 'pmlm.v1';
+  const BUILD = '2026-10-25 15:02 UTC';   // replaced with the build time by build.py
 
   const AVATARS = ['🦊', '🐼', '🐯', '🐸', '🐧', '🦄', '🐨', '🐰'];
   const SHOP_AVATARS = [['🦁', 40], ['🦉', 40], ['🐙', 40], ['🦋', 40], ['🐳', 50], ['🦩', 50], ['🐲', 60], ['🦖', 60], ['👽', 80], ['🤖', 80], ['🐉', 120], ['🦄', 0]].filter(a => a[1] > 0);
@@ -26623,6 +26624,14 @@ const Sfx = (() => {
     const sharedOf = () => JSON.stringify({ pin: state.pin, currency: state.settings.currency, timer: state.settings.timer, order: state.profiles.map(p => p.id), deleted: state.deleted || {} });
     const fam = () => db.collection('families').doc(fid);
     const fmtCode = c => c.slice(0, 4) + '-' + c.slice(4);
+    // A short, human description of a device from its browser's user agent
+    const deviceKind = ua => {
+      if (!ua) return 'unknown device';
+      const dev = /iPad/.test(ua) || (/Macintosh/.test(ua) && /Mobile/.test(ua)) ? 'iPad' : /iPhone/.test(ua) ? 'iPhone' : /Android/.test(ua) ? (/Mobile/.test(ua) ? 'Android phone' : 'Android tablet') : /Macintosh/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : /CrOS/.test(ua) ? 'Chromebook' : 'device';
+      const br = /SamsungBrowser\/(\d+)/.exec(ua) || /(?:CriOS|Chrome)\/(\d+)/.exec(ua) || /(?:FxiOS|Firefox)\/(\d+)/.exec(ua) || /Version\/(\d+)[.\d]* .*Safari/.exec(ua);
+      const name = /SamsungBrowser/.test(ua) ? 'Samsung Internet' : /CriOS|Chrome/.test(ua) ? 'Chrome' : /FxiOS|Firefox/.test(ua) ? 'Firefox' : /Safari/.test(ua) ? 'Safari' : 'browser';
+      return `${dev}, ${name}${br ? ' ' + br[1] : ''}`;
+    };
     const normCode = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
     const userError = msg => Object.assign(new Error(msg), { userMessage: msg });
     const LABELS = {
@@ -26805,13 +26814,27 @@ const Sfx = (() => {
       const c = snap.exists ? snap.data() : null;
       if (!c) throw userError('That code was not found. Check the letters and try again.');
       if (c.role !== j.role) throw userError(c.role === 'parent' ? 'That is an invite code for a parent. Use it under "Parent login" instead.' : 'That code is for linking a child\'s device, not for a parent account.');
-      if (c.expires.toMillis() < Date.now()) throw userError('That code has expired. Ask for a new one.');
+      // Expiry is judged by the server's clock (firestore.rules), never this device's, which may be set wrong
       fid = c.fid; role = j.role;
       me = j.role === 'device' ? { name: j.name, code: j.code, linkedAt: Date.now(), lastSeen: Date.now() } : { email: user.email || '', code: j.code, joinedAt: Date.now() };
       const b = db.batch();
       b.set(fam().collection(j.role === 'device' ? 'devices' : 'parents').doc(user.uid), me);
       b.set(db.collection('users').doc(user.uid), { fid, role });
-      await b.commit();
+      try { await b.commit(); }
+      catch (e) {
+        fid = null; role = null;
+        throw e && e.code === 'permission-denied' ? userError('That code no longer works. It has probably expired (codes last 30 minutes). Ask for a new one.') : e;
+      }
+    }
+    // The server's current time, so code expiry doesn't depend on this device's clock being right
+    async function serverNow() {
+      try {
+        const ref = db.collection('users').doc(user.uid);
+        await ref.set({ clock: fb.firestore.FieldValue.serverTimestamp() }, { merge: true });
+        const t = (await ref.get({ source: 'server' })).data().clock;
+        if (t && t.toMillis) return t.toMillis();
+      } catch (e) { /* fall back to this device's clock */ }
+      return Date.now();
     }
 
     async function startSync() {
@@ -26834,7 +26857,7 @@ const Sfx = (() => {
       if (dirtyShared) state.sharedAt = Date.now();
       afterRemote();
       listen();
-      if (role === 'device') fam().collection('devices').doc(user.uid).update({ lastSeen: Date.now() }).catch(() => {});
+      if (role === 'device') fam().collection('devices').doc(user.uid).update({ lastSeen: Date.now(), version: BUILD, ua: navigator.userAgent.slice(0, 200) }).catch(() => {});
       setStatus('synced');
       if (dirty.size || dirtyShared) flush();
       if (dupes.length) setTimeout(askDupe, 700);
@@ -26948,9 +26971,10 @@ const Sfx = (() => {
       },
       async createCode(kind) {
         if (role !== 'parent') return;
+        const now = await serverNow();
         for (let attempt = 0; attempt < 5; attempt++) {
           const c = Array.from(crypto.getRandomValues(new Uint32Array(8)), n => CODE_CHARS[n % CODE_CHARS.length]).join('');
-          const ms = Date.now() + (kind === 'device' ? 15 * 60 * 1000 : 24 * 3600 * 1000);
+          const ms = now + (kind === 'device' ? 30 * 60 * 1000 : 24 * 3600 * 1000);
           try {
             await db.collection('codes').doc(c).set({ fid, role: kind, expires: fb.firestore.Timestamp.fromMillis(ms), createdBy: user.uid });
             code = { code: c, role: kind, expires: ms, used: false };
@@ -27010,7 +27034,7 @@ const Sfx = (() => {
         let codeBox = '';
         if (code && code.used) codeBox = `<div class="hintbox"><span class="hi">✅</span><span>${code.role === 'device' ? 'Linked! That device now saves to your family.' : 'The other parent has joined your family.'}</span></div><button class="btn small ghost" data-act="codedone">OK</button>`;
         else if (code) codeBox = `<div class="codebox" aria-label="Link code">${fmtCode(code.code)}</div>
-          <p class="muted center" style="font-size:.88rem">${code.role === 'device' ? 'On the child\'s device tap <b>Link to my family</b> and type this code. It works for 15 minutes.' : 'The other parent opens the game, taps <b>Parent login</b>, signs in or creates an account, and types this code under <b>Invite code</b>. It works for 24 hours.'}</p>
+          <p class="muted center" style="font-size:.88rem">${code.role === 'device' ? 'On the child\'s device tap <b>Link to my family</b> and type this code. It works for 30 minutes.' : 'The other parent opens the game, taps <b>Parent login</b>, signs in or creates an account, and types this code under <b>Invite code</b>. It works for 24 hours.'}</p>
           <button class="btn small ghost" data-act="codedone">Cancel this code</button>`;
         return `<div class="card stack"><h3>🔗 Devices and parents</h3>
           <p class="muted" style="font-size:.9rem">Signed in as <b>${h((user && user.email) || 'parent')}</b>. Children's devices linked to your family save their progress here by themselves.</p>
@@ -27018,7 +27042,7 @@ const Sfx = (() => {
           ${codeBox}
           ${code ? '' : `<div class="grid2"><button class="btn primary" data-act="mkcode" data-r="device">Link a child's device</button><button class="btn" data-act="mkcode" data-r="parent">Invite another parent</button></div>`}
           <span class="eyebrow">Linked devices · ${devices.length}</span>
-          ${devices.length ? devices.map(d => `<div class="row between"><span>📱 <b>${h(d.name)}</b> <span class="muted">· last seen ${day(d.lastSeen)}</span></span><button class="btn small ghost" data-act="unlinkdev" data-id="${h(d.id)}">Unlink</button></div>`).join('') : '<p class="muted" style="font-size:.9rem">No devices linked yet.</p>'}
+          ${devices.length ? devices.map(d => `<div class="row between"><span>📱 <b>${h(d.name)}</b> <span class="muted">· last seen ${day(d.lastSeen)} · ${h(deviceKind(d.ua))} · ${d.version ? (d.version === BUILD ? 'up to date' : 'version ' + h(d.version) + ', reload it') : 'old version, reload it'}</span></span><button class="btn small ghost" data-act="unlinkdev" data-id="${h(d.id)}">Unlink</button></div>`).join('') : '<p class="muted" style="font-size:.9rem">No devices linked yet.</p>'}
           <span class="eyebrow">Parents · ${parents.length}</span>
           ${parents.map(p => `<div class="row between"><span>👤 ${h(p.email || 'Parent')}${user && p.id === user.uid ? ' <span class="muted">(you)</span>' : ''}</span>${user && p.id === user.uid ? '' : `<button class="btn small ghost" data-act="rmparent" data-id="${h(p.id)}">Remove</button>`}</div>`).join('')}
           <button class="btn small ghost" data-act="signout">Sign out on this device</button></div>`;
@@ -27231,6 +27255,7 @@ const Sfx = (() => {
     if (S.screen === 'round') return renderQuestion();
     if (S.screen === 'results') return renderResults();
     if (S.screen === 'trydone') return renderTryDone();
+    if (S.screen === 'problem') return renderProblem();
     renderChrome();
     ({ play: renderPlay, wishes: renderWishes, me: renderMe, parent: renderParent })[S.tab]();
     view.scrollTop = S.keepScroll ? view.scrollTop : 0;
@@ -27418,6 +27443,26 @@ const Sfx = (() => {
   }
 
   // ----- Rounds -----
+  function renderProblem() {
+    chrome(false);
+    const sk = PMLM.byId[R && R.skill] || (R && R.sk) || { icon: '❓', title: 'this skill' }, d = ((P() || {}).diag || []).slice(-1)[0];
+    view.innerHTML = `<div class="stack center" style="padding-block:40px;align-items:center">
+      <div style="font-size:4rem">🛠️</div><h2>Oops! ${h(sk.icon)} ${h(sk.title)} didn't load</h2>
+      <p class="muted">The questions for this skill could not be made on this device. It's not your fault! Try another skill, and please tell a grown-up.</p>
+      <p class="muted" style="font-size:.85rem">For grown-ups: a note was saved for this player. Make sure the page is up to date (reload it). Game version ${h(BUILD)}.</p>
+      ${d ? `<details style="max-width:100%;text-align:left"><summary class="muted" style="cursor:pointer">Technical details</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:.75rem">${h(d.skill + ' · level ' + d.level + '\n' + d.msg)}</pre></details>` : ''}
+      <button class="btn primary block" data-act="home">Back to the map</button></div>`;
+  }
+
+  // A question could not be made on this device: keep a note (synced with the player) so it can be diagnosed
+  function noteProblem(skill, level, e) {
+    const p = P();
+    if (!p) return;
+    const msg = String((e && (e.stack || e.message)) || e).slice(0, 500);
+    console.warn('Question failed', skill, level, e);
+    p.diag = (p.diag || []).slice(-9).concat([{ t: Date.now(), skill, level, msg, ua: navigator.userAgent.slice(0, 200), v: BUILD }]);
+  }
+
   function startRound(mode, opts = {}) {
     const p = P(), g = opts.grade || p.grade, gs = gradeState(p, g);
     let items = [];
@@ -27463,9 +27508,14 @@ const Sfx = (() => {
     if (it.review) q = it.review.q;
     else {
       const lvl = it.level || (R.mode === 'extra' ? Math.max(2, ss.level) : R.mode === 'boss' ? Math.min(3, ss.level + 1) : ss.level);
-      for (let k = 0; k < 5; k++) { try { q = sk.gen(lvl, ctx()); } catch (e) { q = null; } if (q && !PMLM_VALIDATE.question(q).length) break; }
+      let err = null;
+      for (let k = 0; k < 5; k++) {
+        try { q = sk.gen(lvl, ctx()); if (q && !PMLM_VALIDATE.question(q).length) break; }
+        catch (e) { q = null; err = e; }
+      }
+      if (!q && !R.noted) { R.noted = true; noteProblem(sk.id, lvl, err || new Error('no question was made')); }
     }
-    if (!q) { R.items.splice(R.i, 1); R.i--; return nextQuestion(); }
+    if (!q) { R.failed = (R.failed || 0) + 1; R.items.splice(R.i, 1); R.i--; return nextQuestion(); }
     R.q = q; R.sk = sk; R.item = it; R.tries = 0; R.hinted = 0; R.done = false; R.qStart = Date.now();
     R.inp = { a: '', w: '', n: '', d: '', x: '', y: '', choice: null, focus: q.kind === 'fraction' ? (q.mixed ? 'w' : 'n') : q.kind === 'coord' ? 'x' : 'a' };
     R.choices = q.kind === 'choice' ? U.shuffle(q.choices) : null;
@@ -27719,6 +27769,8 @@ const Sfx = (() => {
     const answered = R.results.filter(Boolean).length, ok = R.results.filter(r => r === 'ok').length;
     const pct = answered ? Math.round(ok / answered * 100) : 0;
     R.summary = { answered, ok, pct, stars: 0, newStars: false, bossWon: false, wishes: [], trophies: [] };
+    // Every question failed to load: say so instead of showing an empty "Round complete"
+    if (!answered && R.failed) { S.screen = 'problem'; save(); return render(); }
     if (R.mode === 'try') {
       skillState(gs, R.skill).lesson = true; quest('lesson');
       S.screen = 'trydone'; save(); checkTrophies(p); return render();
@@ -27899,6 +27951,7 @@ const Sfx = (() => {
       <div class="card stack"><h3>📊 Progress · ${prog.pct}% mastered</h3>
         <div class="stats"><div class="stat"><b>${prog.mastered}/${prog.total}</b><small>skills mastered</small></div><div class="stat"><b>${mins}</b><small>minutes played</small></div><div class="stat"><b>${fmt(who.stats.answered)}</b><small>questions</small></div><div class="stat"><b>${gs.review.length}</b><small>mistakes to fix</small></div></div>
         ${weak.length ? `<div class="hintbox"><span class="hi">🎯</span><span>Needs most help: ${weak.map(r => `<b>${h(r.s.title)}</b> (${r.acc}%)`).join(', ')}</span></div>` : ''}
+        ${(who.diag || []).length ? `<div class="hintbox explain"><span class="hi">🛠️</span><span>${who.diag.length} question${who.diag.length > 1 ? 's' : ''} failed to load for ${h(who.name)}, latest on ${new Date(who.diag[who.diag.length - 1].t).toLocaleString()} in <b>${h((PMLM.byId[who.diag[who.diag.length - 1].skill] || {}).title || who.diag[who.diag.length - 1].skill)}</b>. Reload the game on their device. If it keeps happening, these notes help fix it.</span></div>` : ''}
         <div class="tablewrap"><table class="report"><thead><tr><th>Skill</th><th>Stars</th><th>First-try</th><th>Level</th><th>Last played</th></tr></thead><tbody>
           ${rows.map(({ s, ss, acc }) => `<tr><td>${h(s.icon)} ${h(s.title)}</td><td>${ss.mastered ? '🧠' : '⭐'.repeat(ss.stars) || '–'}</td><td class="n">${acc == null ? '–' : acc + '% (' + ss.tries + ')'}</td><td class="n">${ss.level}</td><td>${ss.last ? new Date(ss.last).toLocaleDateString() : '–'}</td></tr>`).join('')}
         </tbody></table></div>
@@ -27931,6 +27984,7 @@ const Sfx = (() => {
       <div class="card stack"><h3>🔑 PIN</h3><button class="btn small ghost" data-act="changepin">Change PIN</button>
         <button class="btn small ghost" data-act="resetplayer">Reset ${h(who.name)}'s Grade ${sel.grade} progress</button></div>
       ${DEBUG ? `<div class="card stack"><h3>🛠 Debug</h3><div class="row">${[25, 50, 75, 100].map(v => `<button class="btn small" data-act="dbg" data-v="${v}">Set ${v}%</button>`).join('')}<button class="btn small" data-act="dbgcoins">+500 coins</button></div></div>` : ''}
+      <p class="muted center" style="font-size:.8rem">Game version ${h(BUILD)}</p>
     </div>`;
   }
 
