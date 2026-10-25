@@ -40,7 +40,7 @@ test('parents: PIN, wishes, debug mastery unlocks a wish, granting, report table
   await page.locator('.celebrate button').click();
   await act(page, 'grant', '[data-i="0"]');
   await expect(page.getByText('✅ Granted')).toBeVisible();
-  await expect(page.locator('table.report tbody tr')).toHaveCount(20);
+  await expect(page.locator('table.report', { has: page.locator('th', { hasText: 'Skill' }) }).locator('tbody tr')).toHaveCount(20);
   await act(page, 'lock');
   await expect(page.getByText('Enter the parent PIN')).toBeVisible();
   const s = await state(page);

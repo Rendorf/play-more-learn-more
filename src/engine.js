@@ -1779,16 +1779,20 @@
     // This device's own players always show their latest numbers, even before the server has them
     const docs = ((c && c.docs) || []).concat(state.profiles.map(boardDoc));
     const rows = Board.rows(docs, { period: o.period, metric: o.metric, grade: o.grade, week: Board.weekId(new Date()), today: Board.dayOf(new Date()) });
-    const mine = rows.find(r => r.pid === p.id), m = Board.METRICS[o.metric];
+    const m = Board.METRICS[o.metric];
+    // The child always sees their own row: ranked, or "–" until they score in this view
+    const mine = rows.find(r => r.pid === p.id)
+      || (p.board !== 'hidden' && (!o.grade || o.grade === p.grade) ? Object.assign(boardDoc(p), { rank: '–', value: null }) : null);
     const row = r => `<li class="lbrow ${r.pid === p.id ? 'me' : ''}"><span class="lbrank">${r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : r.rank}</span>
       <span class="lbav">${r.hat ? `<span class="hat">${h(r.hat)}</span>` : ''}${h(r.av || '🙂')}</span>
       <span class="lbname"><b>${h(r.nick || 'Player')}</b><small class="muted">${r.pid === p.id ? 'You · ' : ''}Grade ${h(r.g)}</small></span>
-      <b class="lbval num">${o.metric === 'acc' ? r.value + '%' : fmt(r.value)}</b></li>`;
+      <b class="lbval num">${r.value == null ? '–' : o.metric === 'acc' ? r.value + '%' : fmt(r.value)}</b></li>`;
     const note = !c ? '<p class="muted center">Loading the leaderboard…</p>'
       : c.error ? `<p class="muted center">${c.error === 'offline' ? 'You are offline, so only this device’s players show.' : 'The leaderboard could not be reached, so only this device’s players show.'} Tap ↻ to try again.</p>` : '';
-    const top = rows.slice(0, 50);
-    const list = top.length ? `<ol class="lb">${top.map(row).join('')}</ol>${mine && mine.rank > 50 ? `<ol class="lb">${row(mine)}</ol>` : ''}`
-      : `<p class="muted center">${o.period === 'week' ? 'Nobody is on this week’s board yet.' : 'Nobody is on the board yet.'} Play a round to be first!</p>`;
+    const top = rows.slice(0, 50), pinned = mine && !top.includes(mine);
+    const empty = top.length ? '' : `<p class="muted center">${o.period === 'week' ? 'Nobody is on this week’s board yet.' : 'Nobody is on the board yet.'} Play a round to be first!</p>`;
+    const hint = mine && mine.value == null ? `<p class="muted center" style="font-size:.85rem">${m.min && p.stats.answered < m.min ? `Answer ${m.min - p.stats.answered} more questions to get a first-try %.` : 'Get answers right in a round to climb the board!'}</p>` : '';
+    const list = `${empty}${top.length ? `<ol class="lb">${top.map(row).join('')}</ol>` : ''}${pinned ? `<ol class="lb">${row(mine)}</ol>${hint}` : ''}`;
     view.innerHTML = `<div class="stack">
       <div class="row between"><h2>🏅 Leaderboard</h2><button class="iconbtn" data-act="lbrefresh" aria-label="Refresh the leaderboard">↻</button></div>
       <div class="card row between" style="gap:10px">${p.board === 'hidden' ? `<span class="muted">A grown-up has hidden ${h(p.name)} from the leaderboard.</span>`

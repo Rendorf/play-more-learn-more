@@ -79,7 +79,7 @@ const PMLM_VAPID = '';
   const EMU = /[?&]emu=1/.test(location.search);
   const SDK = 'https://www.gstatic.com/firebasejs/10.14.1/';
   const load = src => new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
-  const show = html => { app.innerHTML = `<div class="row"><h1>PMLM test dashboard</h1><span class="muted">${EMU ? 'emulator · ' : ''}version 2026-10-25 16:58 UTC</span></div>${html}`; };
+  const show = html => { app.innerHTML = `<div class="row"><h1>PMLM test dashboard</h1><span class="muted">${EMU ? 'emulator · ' : ''}version 2026-10-25 17:11 UTC</span></div>${html}`; };
   if (typeof PMLM_FIREBASE === 'undefined' || !PMLM_FIREBASE) { show('<p class="err">This copy has no Firebase project set up (src/config.js).</p>'); return; }
 
   let fb, db;
