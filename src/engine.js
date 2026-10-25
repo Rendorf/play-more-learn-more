@@ -494,6 +494,8 @@
         const target = state.profiles.find(p => p.id === d.remote.id);
         if (same && target) {
           combineProfiles(target, d.local);
+          // The child plays on this device, so their own avatar, hat and world win over the family copy
+          target.avatar = d.local.avatar; target.hat = d.local.hat; target.theme = d.local.theme;
           state.aliases = Object.assign({}, state.aliases, { [d.local.id]: target.id });
           state.profiles = state.profiles.filter(p => p.id !== d.local.id);
           if (state.current === d.local.id) state.current = target.id;
@@ -793,6 +795,8 @@
     chrome(false);
     view.innerHTML = `<div class="stack" style="padding-block:16px">
       <div class="row between"><h2>Your family</h2><button class="iconbtn" data-act="home" aria-label="Back">✕</button></div>
+      <p class="muted">No players in your family yet. Add your children here, then link their devices so the progress they already have is merged in.</p>
+      <button class="btn primary block" data-act="newplayer">+ Add a player</button>
       ${Sync.devicesCard()}</div>`;
   }
 
