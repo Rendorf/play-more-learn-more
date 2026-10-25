@@ -373,10 +373,18 @@ sup, sub { font-size: .65em; }
 <canvas id="fx" aria-hidden="true"></canvas>
 <div id="toast" aria-live="polite"></div>
 <script>/* config.js */
-// Firebase project used for online saving (Parents → Online saving).
-// These web settings are public by design; the Firestore rules in README.md protect the data.
-// Leave as null to turn online saving off.
-const PMLM_FIREBASE = null;
+// Firebase project used for family accounts (parent login and linked children's devices).
+// These web settings are public by design; firestore.rules protects the data.
+// Set to null to turn family accounts off.
+const PMLM_FIREBASE = {
+  apiKey: 'AIzaSyAPyBDEqkixMqNYeIut-ZtXCER4YG6reBQ',
+  authDomain: 'playmorelearnmore.firebaseapp.com',
+  projectId: 'playmorelearnmore',
+  storageBucket: 'playmorelearnmore.firebasestorage.app',
+  messagingSenderId: '891444609113',
+  appId: '1:891444609113:web:642128505c6340720f3148',
+  measurementId: 'G-51Y7VFGZGB',
+};
 
 </script>
 <script>/* util.js */
@@ -26607,7 +26615,7 @@ const Sfx = (() => {
     const SDK = 'https://www.gstatic.com/firebasejs/10.14.1/';
     const FLAG = 'pmlm.sync';
     const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-    let fb = null, db = null, user = null, fid = null, role = null, me = {}, status = 'off', loading = null, flow = false;
+    let fb = null, db = null, user = null, fid = null, role = null, me = {}, status = 'off', loading = null, flow = false, lastError = null;
     let unsubs = [], devices = [], parents = [], code = null, dupes = [];
     let known = {}, knownShared = '', dirty = new Set(), dirtyShared = false, timer = 0, writing = false, pendingRemote = {};
 
@@ -26637,6 +26645,7 @@ const Sfx = (() => {
       'auth/popup-blocked': 'Tap "Continue with Google" once more to open the Google window.',
       'auth/popup-closed-by-user': '', 'auth/cancelled-popup-request': '',
       'auth/operation-not-allowed': 'This sign-in method is not switched on in the Firebase project yet.',
+      'auth/configuration-not-found': 'Logins are not switched on in the Firebase project yet (Authentication → Get started).',
       'auth/admin-restricted-operation': 'Linking devices is not switched on yet (Anonymous sign-in in the Firebase project).',
       'auth/unauthorized-domain': 'This website is not on the Firebase project\'s list of authorized domains yet.',
       'permission-denied': 'The family database refused this. Check the code and try again.',
@@ -26759,7 +26768,7 @@ const Sfx = (() => {
     // Restore on page load or react to sign-out
     async function onUser(u) {
       stopListening();
-      user = u; fid = null; role = null; me = {};
+      user = u; fid = null; role = null; me = {}; lastError = null;
       if (!u) { flag(false); setStatus('off'); return rerender(); }
       setStatus('loading');
       try {
@@ -26775,7 +26784,11 @@ const Sfx = (() => {
         flag(true);
         await startSync();
       } catch (e) {
-        if (e && e.code === 'permission-denied') return unlinked();
+        // A lost membership is handled above; a refusal here means the database rules don't allow this account
+        fid = null; role = null;
+        lastError = e && e.code === 'permission-denied'
+          ? userError('Signed in, but the family database refused it. In Firebase → Firestore Database → Rules, publish the rules from firestore.rules, then try again.')
+          : e;
         setStatus(navigator.onLine === false ? 'offline' : 'error');
       }
     }
@@ -26876,7 +26889,7 @@ const Sfx = (() => {
           catch (e) { fid = null; role = null; user = null; await fb.auth().signOut(); throw e; }
           flag(true); await startSync();
         } else await onUser(user);
-        if (!fid) throw userError('Signed in, but the family could not be opened. Check the internet connection and try again.');
+        if (!fid) throw lastError || userError('Signed in, but the family could not be opened. Check the internet connection and try again.');
       } finally { flow = false; }
     }
 

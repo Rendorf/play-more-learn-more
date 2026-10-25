@@ -135,7 +135,7 @@
     const SDK = 'https://www.gstatic.com/firebasejs/10.14.1/';
     const FLAG = 'pmlm.sync';
     const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-    let fb = null, db = null, user = null, fid = null, role = null, me = {}, status = 'off', loading = null, flow = false;
+    let fb = null, db = null, user = null, fid = null, role = null, me = {}, status = 'off', loading = null, flow = false, lastError = null;
     let unsubs = [], devices = [], parents = [], code = null, dupes = [];
     let known = {}, knownShared = '', dirty = new Set(), dirtyShared = false, timer = 0, writing = false, pendingRemote = {};
 
@@ -165,6 +165,7 @@
       'auth/popup-blocked': 'Tap "Continue with Google" once more to open the Google window.',
       'auth/popup-closed-by-user': '', 'auth/cancelled-popup-request': '',
       'auth/operation-not-allowed': 'This sign-in method is not switched on in the Firebase project yet.',
+      'auth/configuration-not-found': 'Logins are not switched on in the Firebase project yet (Authentication → Get started).',
       'auth/admin-restricted-operation': 'Linking devices is not switched on yet (Anonymous sign-in in the Firebase project).',
       'auth/unauthorized-domain': 'This website is not on the Firebase project\'s list of authorized domains yet.',
       'permission-denied': 'The family database refused this. Check the code and try again.',
@@ -287,7 +288,7 @@
     // Restore on page load or react to sign-out
     async function onUser(u) {
       stopListening();
-      user = u; fid = null; role = null; me = {};
+      user = u; fid = null; role = null; me = {}; lastError = null;
       if (!u) { flag(false); setStatus('off'); return rerender(); }
       setStatus('loading');
       try {
@@ -303,7 +304,11 @@
         flag(true);
         await startSync();
       } catch (e) {
-        if (e && e.code === 'permission-denied') return unlinked();
+        // A lost membership is handled above; a refusal here means the database rules don't allow this account
+        fid = null; role = null;
+        lastError = e && e.code === 'permission-denied'
+          ? userError('Signed in, but the family database refused it. In Firebase → Firestore Database → Rules, publish the rules from firestore.rules, then try again.')
+          : e;
         setStatus(navigator.onLine === false ? 'offline' : 'error');
       }
     }
@@ -404,7 +409,7 @@
           catch (e) { fid = null; role = null; user = null; await fb.auth().signOut(); throw e; }
           flag(true); await startSync();
         } else await onUser(user);
-        if (!fid) throw userError('Signed in, but the family could not be opened. Check the internet connection and try again.');
+        if (!fid) throw lastError || userError('Signed in, but the family could not be opened. Check the internet connection and try again.');
       } finally { flow = false; }
     }
 
