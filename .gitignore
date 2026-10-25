@@ -4,3 +4,4 @@ __pycache__/
 .claude/
 tools/rules-test/node_modules/
 *.log
+CLAUDE.local.md
