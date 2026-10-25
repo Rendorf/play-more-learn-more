@@ -12,3 +12,33 @@ A free, playful maths practice game for the Cambridge curriculum, Grades 1–9 (
 - Works offline. Progress is saved in the browser on each device (use the backup code in the parent area to move it)
 
 Everything is in the single `index.html` file; there is no server and nothing is sent anywhere.
+
+## Editing the game
+
+`index.html` is generated, so edit the files in `src/` and rebuild it.
+
+| Path | What it holds |
+|---|---|
+| `src/grade1.js` … `src/grade9.js` | Lessons and question generators for each Cambridge stage |
+| `src/CONTRACT.md` | The format for skills, questions, text markup and pictures |
+| `src/engine.js` | Screens, rounds, mastery, wishes and the parent area |
+| `src/fx.js` | Themes, backgrounds, celebration effects and sound |
+| `src/visuals.js` | The SVG teaching pictures |
+| `src/shell.html` | Page markup and styles |
+| `tools/check-content.mjs` | Runs every question generator many times and reports problems |
+
+After changing a grade file, check it, rebuild, and push. GitHub Pages updates the live site within a minute or two.
+
+```bash
+node tools/check-content.mjs src/grade6.js
+```
+
+```bash
+python3 build.py
+```
+
+```bash
+git add -A && git commit -m "Describe the change" && git push
+```
+
+Opening `index.html#selftest` in a browser runs the same checks across all grades inside the game, including drawing every picture.
