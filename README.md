@@ -10,11 +10,12 @@ A free, playful maths practice game for the Cambridge curriculum, Grades 1–9 (
 - A parent area behind a PIN: set wishes that unlock at 25%, 50%, 75% and 100% of a grade, see a progress report, and change settings
 - Read-aloud button for younger players
 - 🏅 A leaderboard with fun nicknames: points, active minutes, skills mastered, streak, questions and first-try %, this week or all time, by grade
+- 💌 Invite a friend: a child shares a link; when the friend finishes a first round, the friend gets 50 coins and the child 100 (for up to 10 friends)
 - 🔔 Optional daily reminders, Duolingo style: a motivating message on days nobody has played yet
 - A one-minute setup for grown-ups, Add to Home Screen help, and 🚩 on every question to report a problem
 - Works offline. Progress is saved in the browser on each device (use the backup code in the parent area to move it)
 
-The game is the single `index.html` file and plays the same without internet. The online parts are optional and use the game's Firebase project: family accounts, and for the friends-and-family test anonymous play stats, feedback, the leaderboard and reminders (see [Family test extras](#family-test-extras)).
+The game is the single `index.html` file and plays the same without internet. The online parts are optional and use the game's Firebase project: family accounts, and for the friends-and-family test anonymous play stats, feedback, the leaderboard, reminders and invites (see [Family test extras](#family-test-extras)).
 
 ## Editing the game
 
@@ -30,7 +31,7 @@ The game is the single `index.html` file and plays the same without internet. Th
 | `src/shell.html` | Page markup and styles |
 | `src/config.js` | Firebase settings, feature switches (`PMLM_FEATURES`) and the reminder public key |
 | `src/config.preview.js` | The same for the preview copy (staging Firebase project) |
-| `src/online.js` | Anonymous stats, feedback, leaderboard and reminder subscriptions (Firebase REST, own anonymous sign-in) |
+| `src/online.js` | Anonymous stats, feedback, leaderboard, reminder subscriptions and invite links (Firebase REST, own anonymous sign-in) |
 | `src/board.js` | Leaderboard nicknames, weeks and ranking |
 | `src/reminders.js` | Reminder messages and the rules for when to send one |
 | `src/stats.html` | The test dashboard (built into `stats.html`) |
@@ -99,6 +100,11 @@ While friends and families try the game, these help us learn what works. Each ca
 - **Anonymous play stats:** each device sends small events (opened the game, new player with grade, lesson, round with counts and minutes, wish set or unlocked, a question that failed to load). They carry a random device id and the random player id, never names. Parents can switch it off under Parents → Settings. The `?src=` part of an invite link (for example `?src=ff1`) is remembered, so invite waves can be compared.
 - **Feedback:** 🚩 on any question (with the question, the expected answer and what the child typed), and a "Tell us what you think" box in the Parents area.
 - **Leaderboard (🏅 Top tab):** one entry per child per device in the `leaderboard` collection, with a generated nickname unless a grown-up picks "First name" or "Hidden" under Parents → Players. Minutes count active play only (at most 90 seconds per answered question). The weekly board starts every Monday.
+- **Invite a friend (💌 on the Me tab):** a child shares a link with a random code (`?invite=K7PQ2M`), made on their device and owned by its anonymous account (`invites/{code}`).
+  - A device with no players that opens the link is counted once (`referred/{uid}`). It reports in `invites/{code}/friends/{uid}` when the friend makes a player (with the player name) and finishes a first full round.
+  - The friend's device then gives a 50-coin welcome gift. The inviting device pays 100 coins by setting `rewarded`, which the rules allow only once, for up to 10 friends.
+  - Only the inviting device can read who came. Parents see a summary in the family card, synced with the child.
+  - Grown-ups can switch it off under Parents → Settings. The funnel is on `stats.html`.
 - **Stats dashboard:** `stats.html` on the live site. Sign in with Google. The first time it shows your account id: add a document with that id to an `admins` collection in the Firebase console (any field, for example `ok: true`) and reload.
 
 ### Daily reminders

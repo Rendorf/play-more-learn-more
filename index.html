@@ -222,6 +222,14 @@ nav.tabs[hidden], header.top[hidden] { display: none !important; }
 .sticker.got::after { content: ""; position: absolute; inset: -40%; background: linear-gradient(115deg, transparent 42%, rgba(255,255,255,.35) 50%, transparent 58%); animation: shine 4.5s ease-in-out infinite; pointer-events: none; }
 @keyframes shine { 0%,60% { transform: translateX(-70%) } 100% { transform: translateX(70%) } }
 
+/* Invite a friend */
+.invrow { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 14px; background: var(--panel2); }
+.invrow .ii { font-size: 1.3rem; text-align: center; }
+.invrow b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.invrow .ic { font-family: var(--font-display); font-weight: 800; color: var(--accent); white-space: nowrap; font-size: .9rem; }
+.invitebanner { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center; box-shadow: inset 0 0 0 3px var(--accent); }
+.invitebanner .ib { font-size: 2.2rem; line-height: 1; }
+
 /* Weekly report dots */
 .wkdots { display: inline-flex; gap: 3px; }
 .wkdots i { width: 12px; height: 12px; border-radius: 50%; background: var(--panel2); box-shadow: inset 0 0 0 1px var(--line); }
@@ -498,7 +506,7 @@ const PMLM_FIREBASE = {
 // that copy keeps its own storage on the device (keys start with pmlm-preview.) and uses the staging project.
 const PMLM_ENV = 'live';
 // Online extras for the family test (src/online.js). Set one to false to switch it off without a rollback.
-const PMLM_FEATURES = { stats: true, feedback: true, leaderboard: true, reminders: true };
+const PMLM_FEATURES = { stats: true, feedback: true, leaderboard: true, reminders: true, invites: true };
 // Public key for daily reminders (Web Push), written by tools/admin/setup-push.sh. Empty: reminders stay hidden.
 const PMLM_VAPID = 'BIzQyWxPqV1Cwj3PIbNEdwZyBNaF4RvJBa7qZxLoQMaMYcJlI2pNOy26ffZckF5GzjKDiG4D7YlIX9DB_-1A3A0';
 
@@ -26799,13 +26807,13 @@ const PMLM_REMINDERS = (() => {
 
 </script>
 <script>/* online.js */
-// Online extras for the family test: anonymous play stats, feedback, the leaderboard and daily reminders.
+// Online extras for the family test: anonymous play stats, feedback, the leaderboard, daily reminders and invites.
 // They use the Firestore and sign-in REST APIs of the same Firebase project as family accounts, with their own
 // anonymous account, so they never touch Sync's login. Nothing here blocks play: writes wait in a queue while
 // offline, and failures are quiet. Rules for every collection are in firestore.rules.
 const Online = (() => {
   const CFG = typeof PMLM_FIREBASE !== 'undefined' ? PMLM_FIREBASE : null;
-  const FEATURES = Object.assign({ stats: true, feedback: true, leaderboard: true, reminders: true }, typeof PMLM_FEATURES !== 'undefined' ? PMLM_FEATURES : null);
+  const FEATURES = Object.assign({ stats: true, feedback: true, leaderboard: true, reminders: true, invites: true }, typeof PMLM_FEATURES !== 'undefined' ? PMLM_FEATURES : null);
   const VAPID = typeof PMLM_VAPID !== 'undefined' ? PMLM_VAPID : '';
   const KEY = typeof PMLM_ENV !== 'undefined' && PMLM_ENV === 'preview' ? 'pmlm-preview.' : 'pmlm.';
   const params = new URLSearchParams(location.search), HASH = location.hash.replace('#', '');
@@ -27037,15 +27045,116 @@ const Online = (() => {
     },
   };
 
+  // ---------- Invite a friend ----------
+  // A child's link carries a random code made on their device (invites/{code}, owned by this device's account).
+  // A brand-new device that opens it is counted once (referred/{uid}), then reports when its child joins and
+  // finishes a first full round (invites/{code}/friends/{uid}). The inviting device marks each friend rewarded,
+  // which the rules allow only once, so the coins are paid once whichever device tries.
+  const INV_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  const STAGES = ['opened', 'joined', 'played'];
+  const refused = e => !!(e && e.status && e.status < 500 && e.status !== 401 && e.status !== 429);
+  const friendCache = {};
+  let refBusy = false, refAgain = false;
+  async function refSync() {
+    const r = get('ref');
+    if (!r || r.dead || !has('invites')) return;
+    if (refBusy) { refAgain = true; return; }
+    refBusy = true; refAgain = false;
+    let failed = false;
+    try {
+      const t = await idToken();
+      if (!r.sent.ref) {
+        await call('PATCH', 'referred/' + t.uid, { fields: encFields({ code: r.code, t: Date.now() }) }, '?currentDocument.exists=false');
+        r.sent.ref = true; put('ref', r);
+      }
+      const want = STAGES.indexOf(r.stage);
+      if (want > (r.sent.at == null ? -1 : r.sent.at)) {
+        const f = { t: r.t };
+        if (r.name) f.name = String(r.name).slice(0, 16);
+        if (r.joined) f.joined = r.joined;
+        if (r.played) f.played = r.played;
+        await call('PATCH', `invites/${r.code}/friends/${t.uid}`, { fields: encFields(f) }, '?' + Object.keys(f).map(k => 'updateMask.fieldPaths=' + k).join('&'));
+        r.sent.at = want; put('ref', r);
+      }
+    } catch (e) {
+      failed = true;
+      // A bad code, the child's own link or a device already counted: stop quietly. No network: try again later.
+      if (refused(e)) put('ref', Object.assign(get('ref') || r, { dead: true }));
+    } finally {
+      refBusy = false;
+      if (refAgain && !failed) refSync();
+    }
+  }
+  const invite = {
+    // This device's code for a player (null until the child first shares)
+    mine: pid => (get('inv') || {})[pid] || null,
+    async code(pid) {
+      if (!has('invites')) throw userError('Invites are switched off.');
+      const have = invite.mine(pid);
+      if (have) return have;
+      let t;
+      try { t = await idToken(); } catch (e) { throw userError('Connect to the internet to make your invite link.'); }
+      for (let attempt = 0; ; attempt++) {
+        const c = Array.from(crypto.getRandomValues(new Uint8Array(6)), b => INV_CHARS[b % INV_CHARS.length]).join('');
+        try {
+          await call('PATCH', 'invites/' + c, { fields: encFields({ owner: t.uid, pid, t: Date.now() }) }, '?currentDocument.exists=false');
+          put('inv', Object.assign(get('inv') || {}, { [pid]: c }));
+          return c;
+        } catch (e) {
+          // A clash with someone else's code is refused too, so try a few new codes before giving up
+          if (!e.status) throw userError('Connect to the internet to make your invite link.');
+          if (attempt >= 4) throw userError('Invites are not switched on yet. Ask a grown-up to check again later.');
+        }
+      }
+    },
+    // Who came through a code: [{ id, name, joined, played, rewarded, t }], at most one fetch a minute
+    async friends(code, force) {
+      const c = friendCache[code];
+      if (c && !force && Date.now() - c.at < 60000) return c.list;
+      const j = await call('GET', `invites/${code}/friends`, null, '?pageSize=100');
+      const list = (j.documents || []).map(d => Object.assign({ id: d.name.split('/').pop() }, decFields(d.fields)));
+      friendCache[code] = { list, at: Date.now() };
+      return list;
+    },
+    cached: code => (friendCache[code] || {}).list || null,
+    // Mark one friend's reward as paid: true only when the server accepted this very call
+    async collect(code, uid) {
+      try {
+        await call('PATCH', `invites/${code}/friends/${uid}`, { fields: encFields({ rewarded: Date.now() }) }, '?updateMask.fieldPaths=rewarded&currentDocument.exists=true');
+        return true;
+      } catch (e) { if (refused(e)) return false; throw e; }
+    },
+    // ---- On the invited device ----
+    land(code) {
+      if (!has('invites') || !/^[A-Z0-9]{6}$/.test(code)) return false;
+      const cur = get('ref');
+      if (cur && cur.code !== code) return false;   // this device already came through another invite
+      if (!cur) put('ref', { code, stage: 'opened', sent: {}, t: Date.now() });
+      if (!get('src')) put('src', 'invite');
+      refSync();
+      return true;
+    },
+    get ref() { const r = get('ref'); return r && !r.dead ? r : null; },
+    step(stage, data) {
+      const r = get('ref');
+      if (!r || r.dead) return;
+      if (STAGES.indexOf(stage) > STAGES.indexOf(r.stage)) r.stage = stage;
+      put('ref', Object.assign(r, data));
+      refSync();
+    },
+    gift() { const r = get('ref'); if (r) put('ref', Object.assign(r, { gift: true })); },
+  };
+
   return {
-    enabled, has, KEY, push, install, device, codec: { enc, dec, encFields, decFields },
+    enabled, has, KEY, push, install, device, invite, codec: { enc, dec, encFields, decFields },
     boot(opts) {
       build = opts.build || ''; onChange = opts.onChange || onChange;
       const src = (params.get('src') || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 24);
       if (src && !get('src')) put('src', src);
       if (!enabled) return;
-      addEventListener('online', () => { flushSoon(500); Object.values(pendingBoard).forEach(sendBoard); });
+      addEventListener('online', () => { flushSoon(500); Object.values(pendingBoard).forEach(sendBoard); refSync(); });
       flushSoon(3000);
+      setTimeout(refSync, 2000);
     },
     // True once a day per device (for the daily "open" event)
     firstToday() { const d = Board.dayOf(new Date()); if (get('opened') === d) return false; put('opened', d); return true; },
@@ -27083,7 +27192,7 @@ const Online = (() => {
   // The preview copy (build.py --preview) keeps its own storage, so it never reads or writes real progress
   const KEY = typeof PMLM_ENV !== 'undefined' && PMLM_ENV === 'preview' ? 'pmlm-preview.' : 'pmlm.';
   const STORE_KEY = KEY + 'v1';
-  const BUILD = '2026-10-25 17:39 UTC';   // replaced with the build time by build.py
+  const BUILD = '2026-10-25 18:32 UTC';   // replaced with the build time by build.py
 
   const AVATARS = ['🦊', '🐼', '🐯', '🐸', '🐧', '🦄', '🐨', '🐰'];
   const SHOP_AVATARS = [['🦁', 40], ['🦉', 40], ['🐙', 40], ['🦋', 40], ['🐳', 50], ['🦩', 50], ['🐲', 60], ['🦖', 60], ['👽', 80], ['🤖', 80], ['🐉', 120], ['🦄', 0]].filter(a => a[1] > 0);
@@ -27143,6 +27252,8 @@ const Online = (() => {
     { id: 'page', icon: '📒', name: 'Album page complete', test: p => Object.keys(p.pages || {}).length >= 1 },
     { id: 'lucky', icon: '🍀', name: 'Lucky page complete', test: p => (p.lucky || []).length >= LUCKY.length },
     { id: 'team', icon: '🤝', name: 'Family goal reached', test: p => !!p.teamSeen },
+    { id: 'friend1', icon: '💌', name: 'Brought a friend', test: p => Object.keys(p.inviteRewards || {}).length >= 1 },
+    { id: 'friend5', icon: '🎉', name: '5 friends', test: p => Object.keys(p.inviteRewards || {}).length >= 5 },
     { id: 'fix10', icon: '🔧', name: 'Fixed 10 mistakes', test: p => p.stats.fixed >= 10 },
     { id: 'wish', icon: '🎁', name: 'Wish unlocked', test: (p, c) => c.wishes >= 1 },
     { id: 'shop', icon: '🛍️', name: 'First buy', test: p => p.owned.length >= 1 },
@@ -27728,6 +27839,11 @@ const Online = (() => {
       a.pet = Object.assign({}, more, { kind: named.kind || null, name: named.name || '' });
     }
     if ((b.teamSeen || '') > (a.teamSeen || '')) a.teamSeen = b.teamSeen;
+    if (b.friends) {
+      const fa = a.friends || (a.friends = {}), stg = { o: 0, j: 1, p: 2, r: 3 };
+      for (const [k, f] of Object.entries(b.friends)) if (!fa[k] || (stg[f.s] || 0) > (stg[fa[k].s] || 0)) fa[k] = Object.assign({}, f);
+    }
+    if (b.inviteRewards) a.inviteRewards = Object.assign({}, b.inviteRewards, a.inviteRewards);
     const score = s => (s.mastered ? 1e9 : 0) + (s.stars || 0) * 1e6 + (s.tries || 0);
     const rank = { locked: 0, unlocked: 1, granted: 2 };
     for (const [g, gb] of Object.entries(b.grades || {})) {
@@ -27800,6 +27916,83 @@ const Online = (() => {
     return { av: p.avatar, str: liveStreak(p), frz: freezesOf(p), last: p.streak.last || '', wish: w ? Math.max(0, w.at - peekPct(p, p.grade)) : -1 };
   });
   const refreshView = () => { S.keepScroll = true; render(); S.keepScroll = false; };
+
+  // ---------- Invite a friend (the server side is Online.invite in src/online.js) ----------
+  // A friend who opens a child's link, makes a player and finishes a first full round gets a welcome gift; the
+  // child gets coins for up to INVITE_MAX friends. p.friends is the inviting device's latest view of who came
+  // ({ uid: { n: name, s: 'o' | 'j' | 'p' | 'r', t } }) and p.inviteRewards the payments; both sync with the player.
+  const INVITE_COINS = 100, INVITE_GIFT = 50, INVITE_MAX = 10;
+  const invitesOn = () => Online.has('invites') && state.settings.invites !== false;
+  const inviteLink = code => location.origin + location.pathname + '?invite=' + code;
+  const FRIEND_STAGES = { o: ['👀', 'Opened your link'], j: ['🙋', 'Made a player'], p: ['✅', 'Played a first round'], r: ['✅', 'Played a first round'] };
+  function inviteCard(p) {
+    if (!invitesOn()) return '';
+    const code = Online.invite.mine(p.id), paidTo = p.inviteRewards || {}, paid = Object.keys(paidTo).length;
+    const friends = Object.entries(p.friends || {}).sort((a, b) => (b[1].t || 0) - (a[1].t || 0));
+    const rows = friends.map(([uid, f]) => {
+      const [icon, label] = FRIEND_STAGES[f.s] || FRIEND_STAGES.o;
+      const coins = paidTo[uid] ? `+${INVITE_COINS} 🪙` : f.s === 'p' && paid >= INVITE_MAX ? 'limit reached' : '';
+      return `<div class="invrow"><span class="ii">${icon}</span><span class="stack" style="gap:0;min-width:0"><b>${h(f.n || 'A friend')}</b><small class="muted">${label}</small></span><span class="ic">${coins}</span></div>`;
+    }).join('');
+    return `<div class="card stack" id="invitecard"><div class="row between"><h3>💌 Invite friends</h3><span class="chip">+${INVITE_COINS} 🪙 each</span></div>
+      <p class="muted" style="font-size:.9rem">Send your link to a friend. When they make a player and finish a first round, you get ${INVITE_COINS} 🪙 and they get ${INVITE_GIFT} 🪙. Coins for up to ${INVITE_MAX} friends.</p>
+      <div class="grid2"><button class="btn primary" data-act="invshare">📤 Share link</button><button class="btn" data-act="invcopy">📋 Copy link</button></div>
+      ${rows ? `<div class="stack" style="gap:8px">${rows}</div>
+        <p class="muted" style="font-size:.85rem">${friends.length} friend${friends.length === 1 ? '' : 's'} came · ${paid} reward${paid === 1 ? '' : 's'} · +${fmt(paid * INVITE_COINS)} 🪙</p>`
+        : code ? '<p class="muted" style="font-size:.9rem">No friends yet. When someone opens your link, they show up here.</p>' : ''}
+    </div>`;
+  }
+  async function inviteShare(viaMenu) {
+    const p = P();
+    let code;
+    try { code = await Online.invite.code(p.id); } catch (e) { toast(h((e && e.userMessage) || 'Could not make your link. Check the internet connection.')); return; }
+    const url = inviteLink(code), text = 'Play More Learn More is a fun maths game. Join me with my link and we both get coins!';
+    stat('invite', { mode: 'share' }, p);
+    refreshView();
+    if (viaMenu && navigator.share) {
+      try { await navigator.share({ title: 'Play More Learn More', text, url }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    try { await navigator.clipboard.writeText(url); toast('Link copied! Paste it in a message to your friend.'); }
+    catch (e) {
+      const o = openSheet(`<div class="stack"><h2>💌 Your invite link</h2><p class="muted">Copy this link and send it to a friend.</p>
+        <div class="field"><label for="invlink">Link</label><input id="invlink" readonly value="${h(url)}"></div><button class="btn primary block" data-act="close">Done</button></div>`, true);
+      const i = o.querySelector('input'); i.focus(); i.select();
+    }
+  }
+  // Ask who came through this device's link for the current player, and pay for each first round, once
+  let collecting = false;
+  async function collectInvites(force) {
+    const p0 = P();
+    if (!p0 || collecting || !invitesOn() || Sync.isParent) return;
+    const pid = p0.id, code = Online.invite.mine(pid);
+    if (!code) return;
+    collecting = true;
+    // Family sync may swap in a newer copy of the player while we wait on the network: always change the current one
+    const me = () => state.profiles.find(x => x.id === pid);
+    try {
+      const list = await Online.invite.friends(code, force), paid = [];
+      for (const f of list) {
+        const p = me();
+        if (!p) break;
+        const mine = (p.inviteRewards || {})[f.id], room = Object.keys(p.inviteRewards || {}).length < INVITE_MAX;
+        if (f.played && !f.rewarded && !mine && room && await Online.invite.collect(code, f.id)) {
+          const q = me();
+          q.coins += INVITE_COINS; (q.inviteRewards || (q.inviteRewards = {}))[f.id] = Date.now(); f.rewarded = Date.now();
+          paid.push(f.name || 'A friend'); stat('invite', { mode: 'reward' }, q);
+        }
+      }
+      const p = me();
+      if (!p) return;
+      const friends = Object.assign({}, p.friends);
+      for (const f of list) friends[f.id] = { n: String(f.name || '').slice(0, 16), s: f.rewarded ? 'r' : f.played ? 'p' : f.joined ? 'j' : 'o', t: f.played || f.joined || f.t || 0 };
+      if (JSON.stringify(friends) !== JSON.stringify(p.friends || {}) || paid.length) {
+        p.friends = friends; checkTrophies(p); save();
+        if (S.screen === 'home' && !document.querySelector('.overlay, .celebrate')) refreshView();
+        if (paid.length) showCelebrations(paid.map(n => ({ e: '💌', title: `${n} joined and played!`, text: `+${INVITE_COINS} 🪙 for inviting a friend` })));
+      }
+    } catch (e) { /* offline: the card shows what was known last time */ }
+    finally { collecting = false; }
+  }
 
   // ---------- Rewards: quests, trophies, streaks, wishes ----------
   const toast = msg => {
@@ -28074,6 +28267,7 @@ const Online = (() => {
         <h1 class="logo"><span class="l1">Play More</span><span class="l2">Learn More</span></h1>
         <div class="mascot" style="justify-content:center"><div class="face">🤖</div><div class="bubble">Hi! I'm Blip. Let's make maths fun, one combo at a time!</div></div>
         <p class="center muted">Cambridge maths practice for Grades 1 to 9: short lessons, hints when you need them, and wishes to unlock.</p>
+        ${invitesOn() && Online.invite.ref ? `<div class="card invitebanner"><span class="ib">🎁</span><span><b>A friend invited you!</b> Make your player and finish your first round: you get ${INVITE_GIFT} 🪙 and your friend gets ${INVITE_COINS} 🪙. <span class="muted">Your friend will see your player name.</span></span></div>` : ''}
         ${Sync.isParent ? '<p class="center"><b>You are logged in as a parent.</b> Your family has no players yet. Add one here, or link a child\'s device.</p>' : ''}
         <button class="btn primary block pulse" data-act="newplayer">Add a player</button>
         ${Sync.isParent ? '<button class="btn block" data-act="familyonly">🔗 Link a child\'s device</button>'
@@ -28695,6 +28889,13 @@ const Online = (() => {
     }
     // A real round (5+ questions, or the 60-second challenge) counts towards the day's goal
     R.summary.counts = R.mode === 'extra' || answered >= 5;
+    // Came through a friend's invite: the first full round here brings the welcome gift (and the friend's reward)
+    const ref = R.summary.counts && invitesOn() && Online.invite.ref;
+    if (ref && ref.stage === 'joined' && !ref.gift) {
+      p.coins += INVITE_GIFT; R.summary.gift = true;
+      Online.invite.gift(); Online.invite.step('played', { played: Date.now() });
+      stat('invite', { mode: 'play' }, p);
+    }
     if (recordDay(p, R.summary.counts, Date.now() - R.start, Math.max(0, totalStars(gs) - R.stars0), answered)) {
       R.summary.day = touchStreak(p);
       R.summary.pet = feedPet(p);
@@ -28728,6 +28929,7 @@ const Online = (() => {
     }
     if (sum.level) items.push({ e: '🆙', title: `Level ${sum.level.to}!`, text: `${rankOf(p.brain)} · +${sum.level.coins} 🪙` });
     if (sum.team) items.push({ e: team().emoji || '🤝', title: 'Family goal reached!', text: team().text, wish: true });
+    if (sum.gift) items.push({ e: '🎁', title: 'Welcome gift!', text: `+${INVITE_GIFT} 🪙, and your friend gets ${INVITE_COINS} 🪙 too` });
     if (prog.pct >= 100 && sum.wishes.some(w => w.at === 100)) items.push({ e: '🎓', title: `Grade ${R.grade} complete!`, text: 'You mastered every skill. Amazing work!' });
     showCelebrations(items);
   }
@@ -28811,6 +29013,7 @@ const Online = (() => {
   // ----- Me tab -----
   function renderMe() {
     const p = P(), lv = levelOf(p.brain), lo = levelAt(lv), hi = levelAt(lv + 1);
+    collectInvites();
     const acc = p.stats.answered ? Math.round(p.stats.first / p.stats.answered * 100) : 0;
     const lockd = (a, label, msg) => `<button class="avbtn lockd" data-act="howto" data-msg="${h(msg)}" aria-label="${h(msg)}">${a}<span class="price">${label}</span></button>`;
     view.innerHTML = `<div class="stack">
@@ -28826,6 +29029,7 @@ const Online = (() => {
       </div>
       <div class="grid2"><button class="btn" data-act="album">📒 Sticker album</button>
         <button class="btn" data-act="buyfreeze" ${freezesOf(p) >= FREEZE_MAX ? 'disabled' : ''}>${freezesOf(p) >= FREEZE_MAX ? `🧊 ${FREEZE_MAX}/${FREEZE_MAX} freezes` : `🧊 Freeze · ${FREEZE_COST} 🪙`}</button></div>
+      ${inviteCard(p)}
       <div class="stack" style="gap:8px"><h3>World</h3><div class="themes">${Object.entries(THEMES).map(([id, t]) => `<button class="themecard t-${id} ${p.theme === id ? 'on' : ''}" data-act="theme" data-id="${id}"><span class="te">${t.emoji}</span>${t.name}<small>${t.blurb}</small></button>`).join('')}</div></div>
       <div class="stack" style="gap:8px"><div class="row between"><h3>Avatar</h3><span class="chip">🪙 ${fmt(p.coins)}</span></div>
         <div class="avatars">${AVATARS.map(a => `<button class="avbtn ${p.avatar === a ? 'on' : ''}" data-act="avatar" data-v="${a}">${a}</button>`).join('')}
@@ -28914,6 +29118,7 @@ const Online = (() => {
         ${Online.has('stats') ? '<li>📊 The game sends <b>anonymous</b> play stats: grade, rounds, minutes and skills mastered. No names, no emails and nothing from backups. You can switch this off under Settings.</li>' : ''}
         ${Online.has('leaderboard') ? '<li>🏅 On the leaderboard each child appears with a fun nickname. Under Players you can show the first name instead, or hide them.</li>' : ''}
         ${Online.push.configured ? '<li>🔔 Daily reminders are off unless you turn them on.</li>' : ''}
+        ${Online.has('invites') ? '<li>💌 Children can share an invite link. A friend who joins appears to them by player name only, and both get coins after the friend\'s first round. You can switch this off under Settings.</li>' : ''}
         <li>☁️ Family accounts are optional. They keep progress online, visible only to your family.</li>
         ${Online.has('feedback') ? '<li>💬 Tell us what you think above, or tap 🚩 on any question that looks wrong.</li>' : ''}
       </ul>
@@ -28983,7 +29188,8 @@ const Online = (() => {
         <span class="stack" style="gap:4px;min-width:0"><b>${h(x.name)}</b>
           <span class="muted">Grade ${x.grade} · ${pr.pct}% mastered (${pr.mastered}/${pr.total})</span>
           <span class="bar gold"><i style="width:${pr.pct}%"></i></span>
-          <span class="muted">${last ? 'Last played ' + new Date(last).toLocaleDateString() : 'Not played yet'}${hard ? ` · needs help: ${h(hard.s.title)}` : ''}</span></span></button>`;
+          <span class="muted">${last ? 'Last played ' + new Date(last).toLocaleDateString() : 'Not played yet'}${hard ? ` · needs help: ${h(hard.s.title)}` : ''}</span>
+          ${x.friends && Online.has('invites') ? `<span class="muted">💌 ${Object.keys(x.friends).length} invited · ${Object.values(x.friends).filter(f => f.s === 'p' || f.s === 'r').length} played · +${fmt(Object.keys(x.inviteRewards || {}).length * INVITE_COINS)} 🪙</span>` : ''}</span></button>`;
     }).join('');
     // Pre-select a likely duplicate (same name), keeping the one that has played most recently
     const label = x => { const t = lastActivity(x); return `${x.avatar} ${x.name} · Grade ${x.grade} · ${t ? 'played ' + new Date(t).toLocaleDateString() : 'not played yet'}`; };
@@ -29074,6 +29280,7 @@ const Online = (() => {
 
       <div class="card stack" style="gap:4px"><h3>⚙️ Settings</h3>
         ${Online.has('stats') ? `<label class="toggle"><span>Share anonymous play stats <span class="muted" style="font-weight:400">(no names; it helps us improve the game)</span></span><input type="checkbox" data-change="set" data-k="stats" ${state.settings.stats !== false ? 'checked' : ''}></label>` : ''}
+        ${Online.has('invites') ? `<label class="toggle"><span>Children can share invite links <span class="muted" style="font-weight:400">(friends who join show up by player name)</span></span><input type="checkbox" data-change="set" data-k="invites" ${state.settings.invites !== false ? 'checked' : ''}></label>` : ''}
         <label class="toggle">Sound effects <input type="checkbox" data-change="set" data-k="sfx" ${state.settings.sfx ? 'checked' : ''}></label>
         <label class="toggle">Music during rounds <input type="checkbox" data-change="set" data-k="music" ${state.settings.music ? 'checked' : ''}></label>
         <label class="toggle"><span>Speed bonus <span class="muted" style="font-weight:400">(a timer bar; fast answers earn extra brain power, nothing is lost)</span></span><input type="checkbox" data-change="set" data-k="timer" ${state.settings.timer ? 'checked' : ''}></label>
@@ -29164,8 +29371,12 @@ const Online = (() => {
       save(); Sfx.unlock(); render();
       setTimeout(() => { FX.burst(innerWidth / 2, innerHeight / 3, 20); Sfx.fanfare(); }, 200);
       stat('player', { g: p.grade }, p);
+      const ref = invitesOn() && Online.invite.ref;
+      if (ref && ref.stage === 'opened') { Online.invite.step('joined', { name: p.name, joined: Date.now() }); stat('invite', { mode: 'join' }, p); }
       if (state.profiles.length === 1 && !state.pin && !Sync.isParent) setTimeout(quickStart, 1400);
     },
+    invshare: () => inviteShare(true),
+    invcopy: () => inviteShare(false),
     qsgo: () => { closeSheet(); S.tab = 'parent'; S.screen = 'home'; S.scrollTo = 'wishcard'; render(); },
     grade: d => { P().grade = +d.id; save(); render(); },
     skill: d => skillSheet(d.id),
@@ -29579,6 +29790,16 @@ const Online = (() => {
     if (S.tab === 'parent' && S.screen === 'home' && !typing && !document.querySelector('.overlay')) refreshView();
   } });
   if (Online.firstToday()) stat('open', { n: state.profiles.length });
+  // Arrived through a friend's invite link (?invite=CODE): only a device with no players yet can use it
+  const invited = (new URLSearchParams(location.search).get('invite') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (invited) {
+    const u = new URL(location.href);
+    u.searchParams.delete('invite');
+    try { history.replaceState(null, '', u.pathname + u.search + u.hash); } catch (e) { /* the link stays in the address bar */ }
+    if (invitesOn() && state.profiles.length) setTimeout(() => toast('This device already plays, so the invite can\'t be used here.'), 900);
+    else if (invitesOn() && Online.invite.land(invited)) stat('invite', { mode: 'open' }, null);
+  }
+  setTimeout(() => collectInvites(), 4000);
   render();
   Cloud.init(remote => {
     if (remote && remote.v === 1 && (remote.updatedAt || 0) > (state.updatedAt || 0)) {

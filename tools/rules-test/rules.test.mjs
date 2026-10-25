@@ -221,3 +221,67 @@ test('the extras cannot reach family data', async () => {
   await assertFails(getDoc(doc(owner, 'families/dad/players/p1')), 'an admin of the test data is not a family member');
   await assertFails(getDocs(collection(device('devA'), 'families/dad/players')));
 });
+
+// ---------- Invite a friend ----------
+async function landFriend(uid, code, extra = {}) {
+  const db = device(uid);
+  await setDoc(doc(db, 'referred', uid), { code, t: 1 });
+  await setDoc(doc(db, `invites/${code}/friends/${uid}`), Object.assign({ t: 1 }, extra));
+  return db;
+}
+
+test('invites: only the owner reads an invite and who came through it', async () => {
+  const kid = device('inviter');
+  await assertSucceeds(setDoc(doc(kid, 'invites/K7PQ2M'), { owner: 'inviter', pid: 'p1', t: 1 }));
+  await assertFails(setDoc(doc(kid, 'invites/k7pq2m'), { owner: 'inviter', pid: 'p1' }), 'lower-case code');
+  await assertFails(setDoc(doc(kid, 'invites/TOOLONG1'), { owner: 'inviter', pid: 'p1' }), 'wrong length');
+  await assertFails(setDoc(doc(kid, 'invites/AAAAAA'), { owner: 'someone', pid: 'p1' }), 'owned by another account');
+  await assertFails(setDoc(doc(kid, 'invites/BBBBBB'), { owner: 'inviter', pid: 'p1', name: 'Sam' }), 'unknown field');
+  await assertFails(setDoc(doc(device('thief'), 'invites/K7PQ2M'), { owner: 'thief', pid: 'p9' }), 'taking over a code');
+  await assertFails(updateDoc(doc(kid, 'invites/K7PQ2M'), { pid: 'p2' }), 'no changes afterwards');
+  await assertSucceeds(getDoc(doc(kid, 'invites/K7PQ2M')));
+  await assertFails(getDoc(doc(device('stranger'), 'invites/K7PQ2M')));
+  await landFriend('friend1', 'K7PQ2M', { name: 'Leyla' });
+  await assertSucceeds(getDocs(collection(kid, 'invites/K7PQ2M/friends')));
+  await assertSucceeds(getDoc(doc(device('friend1'), 'invites/K7PQ2M/friends/friend1')), 'the friend sees their own record');
+  await assertFails(getDocs(collection(device('stranger'), 'invites/K7PQ2M/friends')));
+  await assertFails(getDoc(doc(device('friend2'), 'invites/K7PQ2M/friends/friend1')));
+});
+
+test('invites: a new device is counted once, for one invite, and never by the owner', async () => {
+  await setDoc(doc(device('inviter'), 'invites/K7PQ2M'), { owner: 'inviter', pid: 'p1', t: 1 });
+  await setDoc(doc(device('other'), 'invites/ZZZZZZ'), { owner: 'other', pid: 'p2', t: 1 });
+  const f = device('friend1');
+  await assertFails(setDoc(doc(f, 'invites/K7PQ2M/friends/friend1'), { t: 1 }), 'not counted without referred');
+  await assertFails(setDoc(doc(f, 'referred/friend1'), { code: 'NOPE22', t: 1 }), 'an invite that does not exist');
+  await assertFails(setDoc(doc(f, 'referred/friend2'), { code: 'K7PQ2M', t: 1 }), 'for another account');
+  await assertSucceeds(setDoc(doc(f, 'referred/friend1'), { code: 'K7PQ2M', t: 1 }));
+  await assertFails(setDoc(doc(f, 'referred/friend1'), { code: 'ZZZZZZ', t: 1 }), 'switching to another invite');
+  await assertFails(setDoc(doc(f, 'invites/ZZZZZZ/friends/friend1'), { t: 1 }), 'counted for a second invite');
+  await assertFails(setDoc(doc(f, 'invites/K7PQ2M/friends/friend1'), { t: 1, rewarded: 1 }), 'paying itself');
+  await assertFails(setDoc(doc(f, 'invites/K7PQ2M/friends/friend1'), { t: 1, name: 'x'.repeat(17) }), 'name too long');
+  await assertSucceeds(setDoc(doc(f, 'invites/K7PQ2M/friends/friend1'), { t: 1 }));
+  await assertFails(setDoc(doc(device('inviter'), 'referred/inviter'), { code: 'K7PQ2M', t: 1 }), 'the owner counting their own link');
+  await assertSucceeds(getDoc(doc(f, 'referred/friend1')));
+  await assertFails(getDoc(doc(device('inviter'), 'referred/friend1')));
+});
+
+test('invites: the friend reports progress; the owner pays once, only after the first round', async () => {
+  const kid = device('inviter');
+  await setDoc(doc(kid, 'invites/K7PQ2M'), { owner: 'inviter', pid: 'p1', t: 1 });
+  const f = await landFriend('friend1', 'K7PQ2M');
+  const rec = db => doc(db, 'invites/K7PQ2M/friends/friend1');
+  await assertSucceeds(updateDoc(rec(f), { name: 'Leyla', joined: 2 }));
+  await assertFails(updateDoc(rec(kid), { rewarded: 3 }), 'not played yet');
+  await assertFails(updateDoc(rec(kid), { played: 3 }), 'the owner cannot mark it played');
+  await assertFails(updateDoc(rec(device('stranger')), { played: 3 }));
+  await assertSucceeds(updateDoc(rec(f), { played: 3 }));
+  await assertFails(updateDoc(rec(f), { rewarded: 4 }), 'the friend cannot pay');
+  await assertFails(updateDoc(rec(device('stranger')), { rewarded: 4 }));
+  await assertFails(updateDoc(rec(kid), { rewarded: 4, played: 9 }), 'paying while changing other fields');
+  await assertSucceeds(updateDoc(rec(kid), { rewarded: 4 }));
+  await assertFails(updateDoc(rec(kid), { rewarded: 5 }), 'paid only once');
+  await assertFails(updateDoc(rec(f), { name: 'New' , rewarded: null }), 'the friend cannot undo the payment');
+  await assertFails(deleteDoc(rec(kid)));
+  await assertSucceeds(setDoc(doc(device('anon1'), 'events/inv1'), event({ type: 'invite', mode: 'play', n: undefined, ok: undefined, secs: undefined, m: undefined, sk: undefined })));
+});
