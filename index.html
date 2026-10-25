@@ -83,6 +83,9 @@ nav.tabs[hidden], header.top[hidden] { display: none !important; }
 .chip.player { padding: 3px 12px 3px 4px; border: 0; color: inherit; --face: var(--panel); --d: 3px; }
 .chip .av { width: 32px; height: 32px; display: grid; place-items: center; font-size: 1.3rem; border-radius: 50%; background: var(--panel2); position: relative; }
 .chip .av .hat { position: absolute; top: -12px; font-size: .95rem; }
+.chip .av .lv { position: absolute; right: -7px; bottom: -5px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 99px; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); font: 800 .68rem/1 var(--font-display); box-shadow: 0 0 0 2px var(--panel); }
+.chip.streak { border: 0; color: inherit; --face: var(--panel); --d: 3px; }
+.chip.streak.risk .fl { filter: grayscale(.75); }
 .iconbtn { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border-radius: 50%; border: 0; --face: var(--panel); --d: 4px; font-size: 1.15rem; }
 
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; padding: 10px 22px; border: 0; border-radius: var(--r); --face: var(--panel2); --d: 6px; position: relative; color: var(--ink); font-family: var(--font-display); font-weight: 800; font-size: 1.15rem; text-decoration: none; }
@@ -167,6 +170,55 @@ nav.tabs[hidden], header.top[hidden] { display: none !important; }
 .quest .qi { font-size: 1.5rem; }
 .quest.done { opacity: .6; }
 .quest .qr { font-family: var(--font-display); font-weight: 800; color: var(--accent); white-space: nowrap; }
+
+/* Today card: pet, this week's streak, the daily chest */
+.today { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 14px; align-items: center; }
+.today .chestbtn { grid-column: 1 / -1; }
+.pet { position: relative; width: 92px; height: 92px; border: 0; border-radius: 26px; --face: var(--panel2); --d: 5px; display: grid; place-items: center; padding: 0 0 14px; color: var(--ink); }
+.pet .pe { font-size: 2.9rem; line-height: 1; animation: bob 2.4s ease-in-out infinite; }
+.pet .pn { position: absolute; bottom: 6px; left: 4px; right: 4px; font: 800 .72rem/1.1 var(--font-display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pet.sleepy .pe { animation: doze 3.2s ease-in-out infinite; filter: saturate(.6); }
+.pet .zz { position: absolute; top: 2px; right: 6px; font-size: 1.1rem; animation: zz 2.4s ease-in-out infinite; }
+@keyframes doze { 0%,100% { transform: rotate(-6deg) translateY(2px) } 50% { transform: rotate(4deg) translateY(4px) } }
+@keyframes zz { 0% { transform: translate(0, 4px) scale(.8); opacity: 0 } 40% { opacity: 1 } 100% { transform: translate(6px, -10px) scale(1.1); opacity: 0 } }
+.weekbtn { display: block; width: 100%; padding: 0; border: 0; background: none; color: inherit; text-align: inherit; }
+.days7 { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.dcell { display: flex; flex-direction: column; align-items: center; gap: 3px; font: 700 .7rem/1 var(--font-display); color: var(--muted); }
+.dcell i { width: 100%; max-width: 34px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: .95rem; background: var(--panel2); box-shadow: inset 0 0 0 2px var(--line); }
+.dcell.done i { background: #5a4310; background: color-mix(in srgb, var(--accent) 32%, var(--panel2)); box-shadow: inset 0 0 0 2px var(--accent); }
+.dcell.frozen i { background: #1d4d66; background: color-mix(in srgb, var(--sky) 30%, var(--panel2)); box-shadow: inset 0 0 0 2px var(--sky); }
+.dcell.today { color: var(--ink); }
+.dcell.today i { box-shadow: inset 0 0 0 3px var(--go); }
+.dcell.today.done i { box-shadow: inset 0 0 0 3px var(--accent), 0 0 0 2px var(--go); }
+.dcell.future { opacity: .45; }
+@supports (aspect-ratio: 1) { .dcell i { height: auto; aspect-ratio: 1; } }
+
+/* Treasure chest */
+.chest { position: relative; width: 150px; height: 125px; }
+.chestsvg { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 6px 0 rgba(0,0,0,.25)); }
+.chestsvg .lid { transform-origin: 12px 46px; transition: transform .45s cubic-bezier(.2,1.6,.4,1); }
+.chest.shaking { animation: chestshake 1.6s ease-in-out infinite; }
+.chest.open .lid { transform: translate(-4px, -14px) rotate(-24deg); }
+.chest .prize { position: absolute; left: 50%; top: 30%; font-size: 3.4rem; line-height: 1; transform: translate(-50%, 0) scale(0); opacity: 0; }
+.chest.open .prize { animation: prizeup .7s .15s cubic-bezier(.2,1.4,.4,1) forwards; }
+@keyframes chestshake { 0%,55%,100% { transform: none } 62% { transform: rotate(-5deg) } 70% { transform: rotate(5deg) } 78% { transform: rotate(-4deg) } 86% { transform: rotate(3deg) } }
+@keyframes prizeup { to { transform: translate(-50%, -70%) scale(1); opacity: 1 } }
+
+/* Sticker album */
+.album { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 10px; }
+.sticker { position: relative; min-height: 96px; border-radius: 18px; padding: 8px 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-align: center; font-size: .7rem; font-weight: 700; line-height: 1.15; color: var(--muted); background: var(--panel2); border: 2px dashed var(--line); overflow: hidden; overflow-wrap: anywhere; }
+.sticker .se { font-size: 2.1rem; line-height: 1; filter: grayscale(1) brightness(.35) opacity(.55); }
+.sticker .sst { font-size: .6rem; letter-spacing: -1px; }
+.sticker.got { color: var(--ink); border: 0; transform: rotate(var(--rot, 0deg)); background: #5a4310; background: radial-gradient(circle at 28% 22%, rgba(255,255,255,.4), transparent 42%), linear-gradient(140deg, color-mix(in srgb, var(--accent) 45%, var(--panel2)), var(--panel2)); box-shadow: inset 0 0 0 3px var(--accent), 0 4px 0 rgba(0,0,0,.22); }
+.sticker.got .se { filter: drop-shadow(0 2px 0 rgba(0,0,0,.25)); }
+.sticker.got::after { content: ""; position: absolute; inset: -40%; background: linear-gradient(115deg, transparent 42%, rgba(255,255,255,.35) 50%, transparent 58%); animation: shine 4.5s ease-in-out infinite; pointer-events: none; }
+@keyframes shine { 0%,60% { transform: translateX(-70%) } 100% { transform: translateX(70%) } }
+
+/* Weekly report dots */
+.wkdots { display: inline-flex; gap: 3px; }
+.wkdots i { width: 12px; height: 12px; border-radius: 50%; background: var(--panel2); box-shadow: inset 0 0 0 1px var(--line); }
+.wkdots i.done { background: var(--go); box-shadow: none; }
+.wkdots i.some { background: linear-gradient(90deg, var(--accent) 50%, var(--panel2) 50%); }
 
 /* Map */
 .unit { position: relative; margin-top: 26px; }
@@ -338,7 +390,7 @@ sup, sub { font-size: .65em; }
 /* Keycaps: every pressable control has a lit face in its own colour (--face), a darker side --d deep and a soft
    shadow. Pressing (:active, or .pressed set on pointerdown for instant touch feedback) sinks it onto its side;
    selected toggles (current tab, grade, avatar...) sit pressed in. Plain selector lists keep older tablets working. */
-.btn, .k, .choice, .iconbtn, .tab, .seg button, .gradepick button, .avbtn, .themecard, .famcard, .chip.player, .node {
+.btn, .k, .choice, .iconbtn, .tab, .seg button, .gradepick button, .avbtn, .themecard, .famcard, .chip.player, .chip.streak, .pet, .node {
   --side: color-mix(in srgb, var(--face, var(--panel2)) 62%, var(--sidemix));
   --cap: inset 0 2px 0 rgba(255, 255, 255, .3), inset 0 -3px 0 rgba(0, 0, 0, .15), 0 var(--d, 5px) 0 var(--side), 0 calc(var(--d, 5px) + 7px) 14px -7px var(--amb);
   --cap-down: inset 0 2px 0 rgba(255, 255, 255, .14), inset 0 -1px 0 rgba(0, 0, 0, .12), 0 1px 0 var(--side), 0 3px 6px -4px var(--amb);
@@ -354,10 +406,10 @@ sup, sub { font-size: .65em; }
 /* number keys: a dished top like a real keyboard key */
 .k { background-image: radial-gradient(ellipse 70% 55% at 50% 40%, rgba(255, 255, 255, .13), transparent 70%), linear-gradient(180deg, color-mix(in srgb, var(--face) 86%, #fff), var(--face) 52%, color-mix(in srgb, var(--face) 90%, #000)); }
 @media (hover: hover) {
-  .btn:hover, .k:hover, .choice:hover, .iconbtn:hover, .tab:hover, .seg button:hover, .gradepick button:hover, .avbtn:hover, .themecard:hover, .famcard:hover, .chip.player:hover, .node:hover { --lift: -1px; }
+  .btn:hover, .k:hover, .choice:hover, .iconbtn:hover, .tab:hover, .seg button:hover, .gradepick button:hover, .avbtn:hover, .themecard:hover, .famcard:hover, .chip.player:hover, .chip.streak:hover, .pet:hover, .node:hover { --lift: -1px; }
 }
-.btn:active, .k:active, .choice:active, .iconbtn:active, .tab:active, .seg button:active, .gradepick button:active, .avbtn:active, .themecard:active, .famcard:active, .chip.player:active, .node:active,
-.btn.pressed, .k.pressed, .choice.pressed, .iconbtn.pressed, .tab.pressed, .seg button.pressed, .gradepick button.pressed, .avbtn.pressed, .themecard.pressed, .famcard.pressed, .chip.player.pressed, .node.pressed,
+.btn:active, .k:active, .choice:active, .iconbtn:active, .tab:active, .seg button:active, .gradepick button:active, .avbtn:active, .themecard:active, .famcard:active, .chip.player:active, .chip.streak:active, .pet:active, .node:active,
+.btn.pressed, .k.pressed, .choice.pressed, .iconbtn.pressed, .tab.pressed, .seg button.pressed, .gradepick button.pressed, .avbtn.pressed, .themecard.pressed, .famcard.pressed, .chip.player.pressed, .chip.streak.pressed, .pet.pressed, .node.pressed,
 .tab.on, .seg button.on, .gradepick button.on, .choice[disabled] {
   --lift: calc(var(--d, 5px) - 1px);
   box-shadow: var(--cap-down);
@@ -26551,13 +26603,26 @@ const Sfx = (() => {
     <div class="row between"><span class="eyebrow">Grade</span><span class="muted" style="font-size:.85rem">Cambridge ${stageName(g)}</span></div>
     <div class="gradepick" role="tablist" aria-label="Grade">${GRADES.map(x => `<button class="${x === g ? 'on' : ''}" data-act="${act}" ${extra} data-id="${x}" data-v="${x}" aria-label="Grade ${x}">${x}</button>`).join('')}</div></div>`;
   const STORE_KEY = 'pmlm.v1';
-  const BUILD = '2026-10-25 15:22 UTC';   // replaced with the build time by build.py
+  const BUILD = '2026-10-25 16:37 UTC';   // replaced with the build time by build.py
 
   const AVATARS = ['🦊', '🐼', '🐯', '🐸', '🐧', '🦄', '🐨', '🐰'];
   const SHOP_AVATARS = [['🦁', 40], ['🦉', 40], ['🐙', 40], ['🦋', 40], ['🐳', 50], ['🦩', 50], ['🐲', 60], ['🦖', 60], ['👽', 80], ['🤖', 80], ['🐉', 120], ['🦄', 0]].filter(a => a[1] > 0);
   const HATS = [['🧢', 20], ['🎀', 20], ['🎩', 30], ['⛑️', 30], ['🌸', 30], ['🪖', 40], ['🎓', 50], ['⭐', 60], ['👑', 100]];
   const RANKS = [[0, 'Rookie'], [5000, 'Explorer'], [20000, 'Thinker'], [50000, 'Whiz'], [120000, 'Genius'], [250000, 'Mastermind'], [500000, 'Legend']];
   const BOSS_NAMES = ['Grumble', 'Chomp', 'Zorg', 'Blobby', 'Munch', 'Rumble', 'Gloop'];
+  // Streak prizes: [day, coins, hat]. Streak and chest hats can't be bought.
+  const MILESTONES = [[3, 10], [7, 25, '🔥'], [14, 50], [30, 100, '🌈'], [50, 150], [100, 300, '💎']];
+  const FREEZE_MAX = 2, FREEZE_COST = 30;
+  const SPECIAL_HATS = [['🔥', '7🔥', 'Reach a 7-day streak to get this hat!'], ['🌈', '30🔥', 'Reach a 30-day streak to get this hat!'], ['💎', '100🔥', 'Reach a 100-day streak to get this hat!'],
+    ['🌻', '🎁', 'Win this hat from the daily treasure chest!'], ['🍀', '🎁', 'Win this hat from the daily treasure chest!']];
+  const CHEST_AVATARS = ['🦚', '🦦', '🦔', '🐞'], CHEST_HATS = ['🌻', '🍀'];
+  const LUCKY = ['🦄', '🍿', '🍕', '🚀', '🎸', '🦖', '🍩', '🐙', '🌵', '🎈', '🍦', '🦋', '🐳', '🌼', '🍉', '⚽', '🎨', '🧩', '🏰', '🪐', '🦜', '🍓', '🐝', '🦕'];
+  const PETS = {
+    feathers: { name: 'Feathers', hint: '☁️', pet: 'Pip', stages: ['🥚', '🐣', '🐥', '🐦', '🦅'] },
+    scales: { name: 'Scales', hint: '🔥', pet: 'Sparky', stages: ['🥚', '🦎', '🐊', '🐲', '🐉'] },
+    fins: { name: 'Fins', hint: '💧', pet: 'Bubbles', stages: ['🥚', '🐟', '🐠', '🐬', '🐳'] },
+  };
+  const PET_AT = [0, 1, 5, 12, 25];   // days played (goal met) for each stage
 
   const QUESTS = [
     { id: 'answer20', icon: '✏️', text: 'Answer 20 questions', goal: 20, ev: 'answer', coins: 15 },
@@ -26585,8 +26650,19 @@ const Sfx = (() => {
     { id: 'q1000', icon: '🏆', name: '1000 questions', test: p => p.stats.answered >= 1000 },
     { id: 'boss1', icon: '⚔️', name: 'Boss beaten', test: (p, c) => c.bosses >= 1 },
     { id: 'boss3', icon: '🛡️', name: '3 bosses beaten', test: (p, c) => c.bosses >= 3 },
-    { id: 'streak3', icon: '📅', name: '3-day streak', test: p => p.streak.days >= 3 },
-    { id: 'streak7', icon: '🗓️', name: '7-day streak', test: p => p.streak.days >= 7 },
+    { id: 'streak3', icon: '📅', name: '3-day streak', test: p => bestStreak(p) >= 3 },
+    { id: 'streak7', icon: '🗓️', name: '7-day streak', test: p => bestStreak(p) >= 7 },
+    { id: 'streak14', icon: '🏅', name: '14-day streak', test: p => bestStreak(p) >= 14 },
+    { id: 'streak30', icon: '🌟', name: '30-day streak', test: p => bestStreak(p) >= 30 },
+    { id: 'streak100', icon: '💎', name: '100-day streak', test: p => bestStreak(p) >= 100 },
+    { id: 'level10', icon: '🚀', name: 'Level 10', test: p => levelOf(p.brain) >= 10 },
+    { id: 'level20', icon: '🪐', name: 'Level 20', test: p => levelOf(p.brain) >= 20 },
+    { id: 'pet', icon: '🐣', name: 'Pet hatched', test: p => !!(p.pet && p.pet.kind) && petStage(p) >= 1 },
+    { id: 'petgrown', icon: '🐉', name: 'Pet grown up', test: p => !!(p.pet && p.pet.kind) && petStage(p) >= 4 },
+    { id: 'chest10', icon: '🗝️', name: '10 chests opened', test: p => ((p.chest || {}).opened || 0) >= 10 },
+    { id: 'page', icon: '📒', name: 'Album page complete', test: p => Object.keys(p.pages || {}).length >= 1 },
+    { id: 'lucky', icon: '🍀', name: 'Lucky page complete', test: p => (p.lucky || []).length >= LUCKY.length },
+    { id: 'team', icon: '🤝', name: 'Family goal reached', test: p => !!p.teamSeen },
     { id: 'fix10', icon: '🔧', name: 'Fixed 10 mistakes', test: p => p.stats.fixed >= 10 },
     { id: 'wish', icon: '🎁', name: 'Wish unlocked', test: (p, c) => c.wishes >= 1 },
     { id: 'shop', icon: '🛍️', name: 'First buy', test: p => p.owned.length >= 1 },
@@ -26601,12 +26677,17 @@ const Sfx = (() => {
   const pickOne = a => a[Math.floor(Math.random() * a.length)];
 
   // ---------- State & storage ----------
-  const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  // In #debug a parent can move the game's clock forward a day at a time to try out streaks, the chest and the pet
+  const dayShift = () => { if (!DEBUG) return 0; try { return +sessionStorage.getItem('pmlm.dayShift') || 0; } catch (e) { return 0; } };
+  const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const today = () => ymd(new Date(Date.now() + dayShift() * 86400000));
   const dayDiff = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
-  const DEFAULT = () => ({ v: 1, pin: null, settings: { sfx: true, music: true, timer: false, currency: '₼', keySound: 'clicky' }, profiles: [], current: null, updatedAt: 0 });
+  const addDays = (d, n) => { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() + n); return ymd(x); };
+  const weekStart = d => { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() - (x.getDay() + 6) % 7); return ymd(x); };
+  const DEFAULT = () => ({ v: 1, pin: null, settings: { sfx: true, music: true, timer: false, currency: '₼', keySound: 'clicky', dailyGoal: 1 }, profiles: [], current: null, updatedAt: 0 });
   const newProfile = (name, avatar, grade, theme) => ({
     id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name, avatar, grade, theme, hat: null,
-    coins: 0, brain: 0, owned: [], trophies: {}, streak: { days: 0, last: null }, quests: { date: null, list: [] },
+    coins: 0, brain: 0, owned: [], trophies: {}, streak: { days: 0, last: null, best: 0, freezes: 1, frozen: [] }, quests: { date: null, list: [] },
     stats: { answered: 0, correct: 0, first: 0, ms: 0, rounds: 0, bestCombo: 0, fixed: 0, perfect: 0 }, grades: {},
   });
   const gradeState = (p, g) => p.grades[g] || (p.grades[g] = {
@@ -26677,7 +26758,7 @@ const Sfx = (() => {
     let known = {}, knownShared = '', dirty = new Set(), dirtyShared = false, timer = 0, writing = false, pendingRemote = {};
 
     const strip = p => { const { updatedAt, ...rest } = p; return JSON.stringify(rest); };
-    const sharedOf = () => JSON.stringify({ pin: state.pin, currency: state.settings.currency, timer: state.settings.timer, order: state.profiles.map(p => p.id), deleted: state.deleted || {} });
+    const sharedOf = () => JSON.stringify({ pin: state.pin, currency: state.settings.currency, timer: state.settings.timer, goal: state.settings.dailyGoal || 1, team: state.team || null, order: state.profiles.map(p => p.id), deleted: state.deleted || {} });
     const fam = () => db.collection('families').doc(fid);
     const fmtCode = c => c.slice(0, 4) + '-' + c.slice(4);
     // A short, human description of a device from its browser's user agent
@@ -26811,6 +26892,8 @@ const Sfx = (() => {
         state.pin = sh.pin || (joining ? state.pin : null);
         if (sh.currency) state.settings.currency = sh.currency;
         state.settings.timer = !!sh.timer;
+        if (sh.goal) state.settings.dailyGoal = sh.goal;
+        if (sh.team) state.team = sh.team;
         const order = sh.order || [], ix = id => { const k = order.indexOf(id); return k < 0 ? 1e9 : k; };
         state.profiles.sort((a, b) => ix(a.id) - ix(b.id));
         if (newer) state.sharedAt = d.updatedAt;
@@ -26819,6 +26902,8 @@ const Sfx = (() => {
       state.profiles = state.profiles.filter(p => !deleted[p.id]);
       if (!state.profiles.some(p => p.id === state.current)) state.current = state.profiles[0] ? state.profiles[0].id : null;
       knownShared = sharedOf();
+      // Written by a device too old to know the daily goal and team goal: put ours back on the next save
+      if ((!sh.goal || (!sh.team && state.team)) && (newer || joining)) knownShared = '';
       return true;
     }
 
@@ -27141,7 +27226,22 @@ const Sfx = (() => {
     a.stats.bestCombo = Math.max(a.stats.bestCombo || 0, (b.stats || {}).bestCombo || 0);
     a.owned = [...new Set([...(a.owned || []), ...(b.owned || [])])];
     for (const [k, t] of Object.entries(b.trophies || {})) if (!a.trophies[k] || t < a.trophies[k]) a.trophies[k] = t;
-    if (((b.streak || {}).days || 0) > ((a.streak || {}).days || 0)) a.streak = Object.assign({}, b.streak);
+    const sb = b.streak || {}, best = Math.max(bestStreak(a), sb.best || 0, sb.days || 0), freezes = Math.max(freezesOf(a), sb.freezes == null ? 1 : sb.freezes);
+    if ((sb.days || 0) > (a.streak.days || 0)) a.streak = Object.assign({}, sb);
+    Object.assign(a.streak, { best, freezes });
+    // Daily log and the rewards that hang off it
+    if (b.days) {
+      const log = a.days || (a.days = {});
+      for (const [d, eb] of Object.entries(b.days)) { const ea = log[d] || (log[d] = { r: 0, ms: 0, st: 0, q: 0 }); for (const k of ['r', 'ms', 'st', 'q']) ea[k] = add(ea[k], eb[k]); }
+    }
+    if (b.chest) a.chest = { last: [(a.chest || {}).last || '', b.chest.last || ''].sort().pop() || null, opened: add((a.chest || {}).opened, b.chest.opened) };
+    if (b.lucky) a.lucky = [...new Set([...(a.lucky || []), ...b.lucky])];
+    for (const [u, t] of Object.entries(b.pages || {})) if (!(a.pages || (a.pages = {}))[u]) a.pages[u] = t;
+    if (b.pet) {
+      const pa = a.pet || {}, pb = b.pet, more = (pb.days || 0) > (pa.days || 0) ? pb : pa, named = pa.kind ? pa : pb;
+      a.pet = Object.assign({}, more, { kind: named.kind || null, name: named.name || '' });
+    }
+    if ((b.teamSeen || '') > (a.teamSeen || '')) a.teamSeen = b.teamSeen;
     const score = s => (s.mastered ? 1e9 : 0) + (s.stars || 0) * 1e6 + (s.tries || 0);
     const rank = { locked: 0, unlocked: 1, granted: 2 };
     for (const [g, gb] of Object.entries(b.grades || {})) {
@@ -27163,6 +27263,13 @@ const Sfx = (() => {
         if ((rank[wb.status] || 0) > (rank[wa.status] || 0)) Object.assign(wa, { status: wb.status, unlockedAt: wb.unlockedAt, grantedAt: wb.grantedAt });
       });
     }
+    (b.streakWishes || []).forEach((wb, i) => {
+      const wa = (a.streakWishes || (a.streakWishes = newStreakWishes()))[i];
+      if (!wa) return;
+      if (!wa.text.trim() && (wb.text || '').trim()) { wa.text = wb.text; wa.emoji = wb.emoji; }
+      if ((rank[wb.status] || 0) > (rank[wa.status] || 0)) Object.assign(wa, { status: wb.status, unlockedAt: wb.unlockedAt, grantedAt: wb.grantedAt });
+      wa.prog = Math.max(wa.prog || 0, wb.prog || 0);
+    });
     return a;
   }
 
@@ -27213,12 +27320,118 @@ const Sfx = (() => {
     fresh.forEach((t, i) => setTimeout(() => toast(`New trophy! ${t.icon} ${h(t.name)}`), 400 + i * 700));
     return fresh;
   }
-  function touchStreak(p) {
-    const d = today();
-    if (p.streak.last === d) return;
-    p.streak.days = p.streak.last && dayDiff(p.streak.last, d) === 1 ? p.streak.days + 1 : 1;
-    p.streak.last = d;
+
+  // ---------- Daily goal, streak, pet, chest, levels ----------
+  // A day counts once the child finishes enough real rounds (dailyGoal: 1-3, shared by the family). Missed
+  // days are covered by freezes when the child next meets the goal. Readers never write defaults into a
+  // player, so just looking at a sibling's progress never makes their copy look newer than it is.
+  const dailyGoal = () => state.settings.dailyGoal || 1;
+  const roundsOn = (p, d) => ((p.days || {})[d] || {}).r || 0;
+  const dayDone = p => p.streak.last === today();
+  const goalLeft = p => (dayDone(p) ? 0 : Math.max(1, dailyGoal() - roundsOn(p, today())));
+  const freezesOf = p => (p.streak.freezes == null ? 1 : p.streak.freezes);
+  const bestStreak = p => Math.max(p.streak.best || 0, p.streak.days || 0);
+  // The streak as it stands: alive if the goal was met today or yesterday, or the freezes held cover the gap
+  function liveStreak(p) {
+    const s = p.streak;
+    if (!s.last || !s.days) return 0;
+    const missed = dayDiff(s.last, today()) - 1;
+    return missed <= freezesOf(p) ? s.days : 0;
   }
+  // Each day's mark for the calendar: the current run counted back from its last day, plus any day the goal was met
+  function dayMarks(p) {
+    const s = p.streak, marks = {}, frozen = new Set(s.frozen || []);
+    for (const [d, e] of Object.entries(p.days || {})) if (e.r >= dailyGoal()) marks[d] = 'done';
+    frozen.forEach(d => { marks[d] = 'frozen'; });
+    let d = s.last, left = s.days || 0;
+    for (let guard = 0; d && left > 0 && guard < 400; guard++, d = addDays(d, -1)) {
+      if (frozen.has(d)) marks[d] = 'frozen'; else { marks[d] = 'done'; left--; }
+    }
+    return marks;
+  }
+  const totalStars = gs => Object.values(gs.skills).reduce((a, ss) => a + (ss.mastered ? 3 : ss.stars || 0), 0);
+  // Log a finished round for today; true when this round is the one that meets the day's goal
+  function recordDay(p, counts, ms, stars, questions) {
+    const d = today(), log = p.days || (p.days = {}), e = log[d] || (log[d] = { r: 0, ms: 0, st: 0, q: 0 });
+    if (counts) e.r++;
+    e.ms += ms; e.st += stars; e.q += questions;
+    const keys = Object.keys(log).sort();
+    keys.slice(0, Math.max(0, keys.length - 120)).forEach(k => delete log[k]);
+    return counts && e.r >= dailyGoal() && !dayDone(p);
+  }
+  // The day's goal was just met: grow the streak (spending freezes on missed days) and collect what it earns
+  function touchStreak(p) {
+    const s = p.streak, d = today(), out = { days: 0, milestone: null, freezeEarned: false, frozen: 0, wishes: [] };
+    if (s.last === d) return out;
+    const missed = s.last ? dayDiff(s.last, d) - 1 : 0, held = freezesOf(p);
+    s.freezes = held;
+    if (s.last && s.days && missed === 0) s.days++;
+    else if (s.last && s.days && missed <= held) {
+      s.freezes = held - missed; out.frozen = missed;
+      s.frozen = (s.frozen || []).concat(Array.from({ length: missed }, (_, i) => addDays(s.last, i + 1))).slice(-30);
+      s.days++;
+    } else s.days = 1;
+    s.last = d; s.best = Math.max(s.best || 0, s.days); out.days = s.days;
+    if (s.days % 7 === 0 && s.freezes < FREEZE_MAX) { s.freezes++; out.freezeEarned = true; }
+    const m = MILESTONES.find(x => x[0] === s.days);
+    if (m) { p.coins += m[1]; if (m[2] && !p.owned.includes(m[2])) p.owned.push(m[2]); out.milestone = m; }
+    for (const w of p.streakWishes || []) {
+      if (w.status !== 'locked' || !w.text.trim()) continue;
+      w.prog = s.days > 1 ? (w.prog || 0) + 1 : 1;
+      if (w.prog >= w.at) { w.status = 'unlocked'; w.unlockedAt = Date.now(); out.wishes.push(w); }
+    }
+    return out;
+  }
+  const newStreakWishes = () => [7, 14, 30].map(at => ({ at, text: '', emoji: at === 30 ? '🎁' : '🎈', status: 'locked', prog: 0 }));
+  // How far a streak wish has got: its own count, but never more than the streak that is alive now
+  const wishProg = (p, w) => Math.min(w.prog || 0, liveStreak(p));
+
+  const petStage = p => PET_AT.filter(x => ((p.pet || {}).days || 0) >= x).length - 1;
+  const petFace = p => (p.pet && p.pet.kind ? PETS[p.pet.kind].stages[petStage(p)] : '🥚');
+  // Sleepy (never sad) when yesterday was missed and today's goal isn't met yet
+  const petSleepy = p => !!(p.pet && p.pet.last) && !dayDone(p) && dayDiff(p.pet.last, today()) >= 2;
+  function feedPet(p) {
+    const pet = p.pet || (p.pet = { kind: null, name: '', days: 0, last: null }), before = petStage(p);
+    if (pet.last === today()) return null;
+    pet.days++; pet.last = today();
+    return pet.kind && petStage(p) > before ? petStage(p) : null;
+  }
+
+  const chestReady = p => dayDone(p) && (p.chest || {}).last !== today();
+  function chestPrize(p) {
+    const r = Math.random(), lucky = LUCKY.filter(x => !(p.lucky || []).includes(x));
+    const rare = CHEST_AVATARS.map(v => ({ v, hat: false })).concat(CHEST_HATS.map(v => ({ v, hat: true }))).filter(x => !p.owned.includes(x.v));
+    if (r < 0.05 && rare.length) return Object.assign({ kind: 'item' }, pickOne(rare));
+    if (r < 0.05 && lucky.length) return { kind: 'lucky', v: pickOne(lucky) };
+    if (r < 0.15 && freezesOf(p) < FREEZE_MAX) return { kind: 'freeze' };
+    if (r < 0.30 && lucky.length) return { kind: 'lucky', v: pickOne(lucky) };
+    return { kind: 'coins', n: 10 + Math.floor(Math.random() * 21) };
+  }
+
+  // Level L needs 750·L·(L−1) brain power: level 2 at 1,500, level 5 at 15,000, level 10 at 67,500
+  const levelAt = L => 750 * L * (L - 1);
+  const levelOf = brain => { let L = 1; while (levelAt(L + 1) <= (brain || 0)) L++; return L; };
+  const rankOf = brain => RANKS.filter(r => (brain || 0) >= r[0]).pop()[1];
+
+  // Album pages: a unit's page is complete when every skill in it is mastered (+30 coins once)
+  function checkPages(p, g) {
+    const fresh = [];
+    for (const u of unitsOf(g)) {
+      const list = PMLM.skillsInUnit(u.id);
+      if (!list.length || (p.pages || {})[u.id] || !list.every(s => skillState(gradeState(p, g), s.id).mastered)) continue;
+      (p.pages || (p.pages = {}))[u.id] = Date.now(); p.coins += 30; fresh.push(u);
+    }
+    return fresh;
+  }
+
+  // Family team goal: everyone's real rounds this week (Monday to Sunday) fill one bar
+  const team = () => state.team || { target: 15, text: '', emoji: '🍿', given: {} };
+  const weekRounds = (p, start) => Array.from({ length: 7 }, (_, i) => roundsOn(p, addDays(start, i))).reduce((a, b) => a + b, 0);
+  function teamProgress(start = weekStart(today())) {
+    const per = state.profiles.map(p => ({ p, n: weekRounds(p, start) }));
+    return { per, total: per.reduce((a, x) => a + x.n, 0) };
+  }
+  const teamReached = () => !!team().text.trim() && teamProgress().total >= team().target;
   // Returns wishes that just unlocked
   function checkWishes(p, g) {
     const gs = gradeState(p, g), { pct } = gradeProgress(p, g), out = [];
@@ -27312,6 +27525,7 @@ const Sfx = (() => {
     if (S.screen === 'results') return renderResults();
     if (S.screen === 'trydone') return renderTryDone();
     if (S.screen === 'problem') return renderProblem();
+    if (S.screen === 'album') return renderAlbum();
     renderChrome();
     ({ play: renderPlay, wishes: renderWishes, me: renderMe, parent: renderParent })[S.tab]();
     view.scrollTop = S.keepScroll ? view.scrollTop : 0;
@@ -27324,13 +27538,13 @@ const Sfx = (() => {
     chrome(true);
     const muted = !state.settings.sfx && !state.settings.music;
     topEl.innerHTML = `
-      <button class="chip player" data-act="players" aria-label="Switch player"><span class="av">${h(p.avatar)}${p.hat ? `<span class="hat">${h(p.hat)}</span>` : ''}</span>${h(p.name)}</button>
+      <button class="chip player" data-act="players" aria-label="Switch player"><span class="av">${h(p.avatar)}${p.hat ? `<span class="hat">${h(p.hat)}</span>` : ''}<span class="lv" aria-label="Level ${levelOf(p.brain)}">${levelOf(p.brain)}</span></span>${h(p.name)}</button>
       <div class="grow"></div>
-      <span class="chip" title="Day streak">🔥 <span class="num">${p.streak.days}</span></span>
+      <button class="chip streak ${dayDone(p) ? '' : 'risk'}" data-act="streak" aria-label="Day streak ${liveStreak(p)}, open the calendar"><span class="fl">🔥</span> <span class="num">${liveStreak(p)}</span></button>
       <span class="chip" title="Coins">🪙 <span class="num">${fmt(p.coins)}</span></span>
       ${Sync.chip()}
       <button class="iconbtn" data-act="mute" aria-label="${muted ? 'Turn sound on' : 'Turn sound off'}">${muted ? '🔇' : '🔊'}</button>`;
-    const t = theme(), unlocked = GRADES.reduce((a, g) => a + gradeState(p, g).wishes.filter(w => w.status === 'unlocked').length, 0);
+    const t = theme(), unlocked = GRADES.reduce((a, g) => a + gradeState(p, g).wishes.filter(w => w.status === 'unlocked').length, 0) + (p.streakWishes || []).filter(w => w.status === 'unlocked').length;
     tabsEl.innerHTML = [['play', t.emoji, 'Play'], ['wishes', '🎁', 'Wishes' + (unlocked ? ` (${unlocked})` : '')], ['me', '🏆', 'Me'], ['parent', '🔒', 'Parents']]
       .map(([id, ic, lb]) => `<button class="tab ${S.tab === id ? 'on' : ''}" data-act="tab" data-id="${id}"><span class="ti">${ic}</span>${lb}</button>`).join('');
   }
@@ -27397,15 +27611,53 @@ const Sfx = (() => {
     return `<div class="ring"><svg viewBox="0 0 110 110"><circle cx="55" cy="55" r="${r}" style="fill:none;stroke:var(--panel2);stroke-width:12"/><circle cx="55" cy="55" r="${r}" style="fill:none;stroke:var(--go);stroke-width:12;stroke-linecap:round;stroke-dasharray:${c};stroke-dashoffset:${c * (1 - pct / 100)};transition:stroke-dashoffset 1s"/></svg><div class="lbl"><b>${pct}%</b><small>mastered</small></div></div>`;
   }
 
+  const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  function weekRow(p, start, marks = dayMarks(p)) {
+    const t = today();
+    return `<span class="days7">${DOW.map((l, i) => {
+      const d = addDays(start, i), m = marks[d];
+      return `<span class="dcell ${m || ''} ${d === t ? 'today' : d > t ? 'future' : ''}"><i>${m === 'done' ? '🔥' : m === 'frozen' ? '🧊' : ''}</i>${l}</span>`;
+    }).join('')}</span>`;
+  }
+  // Top of the Play tab: the pet, this week's streak and the chest once the day's goal is met
+  function todayCard(p) {
+    const live = liveStreak(p), left = goalLeft(p), sleepy = petSleepy(p), pet = p.pet || {};
+    return `<div class="card today">
+      <button class="pet ${sleepy ? 'sleepy' : ''}" data-act="pet" aria-label="${pet.kind ? h(pet.name) : 'Your egg'}"><span class="pe">${petFace(p)}</span>${sleepy ? '<span class="zz">💤</span>' : ''}<span class="pn">${pet.kind ? h(pet.name) : 'Tap me!'}</span></button>
+      <div class="stack" style="gap:8px;min-width:0">
+        <div class="row between" style="gap:6px"><b class="num" style="font-size:1.15rem">🔥 ${live ? `${live}-day streak` : 'Start a streak!'}</b><span class="muted" style="font-size:.85rem" title="Streak freezes">🧊 ${freezesOf(p)}</span></div>
+        <button class="weekbtn" data-act="streak" aria-label="Open the streak calendar">${weekRow(p, weekStart(today()))}</button>
+        <span style="font-size:.9rem;font-weight:700" class="${left ? 'muted' : ''}">${sleepy ? `${h(pet.name || 'Your egg')} missed you! One round wakes it up.` : left ? `${left} round${left > 1 ? 's' : ''} to go today` : 'Done today ✓'}</span>
+      </div>
+      ${chestReady(p) ? '<button class="btn primary block pulse chestbtn" data-act="chest">🎁 Open today\'s treasure chest!</button>' : ''}
+    </div>`;
+  }
+  function teamCard() {
+    const t = team();
+    if (!t.text.trim()) return '';
+    const { per, total } = teamProgress();
+    return `<div class="card stack" style="gap:10px"><div class="row between"><h3>🤝 Family goal</h3><span class="muted" style="font-size:.85rem">${Math.min(total, t.target)}/${t.target} rounds this week</span></div>
+      <div class="row" style="gap:12px;flex-wrap:nowrap"><span style="font-size:2rem;line-height:1">${h(t.emoji || '🎁')}</span><span class="stack" style="gap:6px;min-width:0;flex:1"><b>${h(t.text)}</b><span class="bar gold"><i style="width:${Math.min(100, total / t.target * 100)}%"></i></span></span></div>
+      <div class="row" style="gap:6px">${per.map(x => `<span class="chip">${h(x.p.avatar)} ${h(x.p.name)} · ${x.n}</span>`).join('')}</div>
+      <span class="muted" style="font-size:.85rem">${total >= t.target ? '🎉 Reached! Show a grown-up.' : 'Every full round from anyone in the family fills the bar.'}</span></div>`;
+  }
+
   function renderPlay() {
     const p = P(), g = p.grade, gs = gradeState(p, g), t = theme(), units = unitsOf(g);
     const prog = gradeProgress(p, g), next = nextSkill(p, g);
     const nextWish = gs.wishes.find(w => w.status === 'locked');
     const hour = new Date().getHours(), hi = hour < 12 ? 'Good morning' : hour < 18 ? 'Hi' : 'Good evening';
-    const msg = !units.length ? 'This grade is coming soon!' : prog.pct >= 100 ? 'You mastered the whole grade! Legend!' : next && skillState(gs, next.id).stars ? `Let's beat ${next.title}!` : `${hi}, ${h(p.name)}! Ready to learn?`;
+    const live = liveStreak(p), left = goalLeft(p);
+    const msg = !units.length ? 'This grade is coming soon!' : live && left ? `Keep your ${live}-day streak: finish ${left} round${left > 1 ? 's' : ''} today!` : prog.pct >= 100 ? 'You mastered the whole grade! Legend!' : next && skillState(gs, next.id).stars ? `Let's beat ${next.title}!` : `${hi}, ${h(p.name)}! Ready to learn?`;
     const quests = dailyQuests(p);
+    // A sibling's rounds can fill the family goal: celebrate it on the child's own device the next time they look
+    if (!Sync.isParent && teamReached() && p.teamSeen !== weekStart(today())) {
+      p.teamSeen = weekStart(today()); checkTrophies(p); save();
+      setTimeout(() => showCelebrations([{ e: team().emoji || '🤝', title: 'Family goal reached!', text: team().text, wish: true }]), 500);
+    }
     let html = `<div class="stack">
       ${gradePick(g)}
+      ${todayCard(p)}
       <div class="card stack">
         <div class="hero">${ring(prog.pct)}<div class="stack" style="gap:8px;min-width:0">
           <div class="mascot"><div class="face" style="font-size:2.4rem">${t.mascot}</div><div class="bubble">${msg}</div></div>
@@ -27423,6 +27675,7 @@ const Sfx = (() => {
         <b style="font-family:var(--font-display);font-size:1.1rem">${nextWish.text ? h(nextWish.text) : 'Ask a grown-up to add a wish!'}</b>
         <span class="bar gold"><i style="width:${Math.min(100, prog.pct / nextWish.at * 100)}%"></i></span></span></button>`;
     }
+    html += teamCard();
     html += `<div class="card stack" style="gap:10px"><div class="row between"><h3>Today's quests</h3><span class="muted" style="font-size:.85rem">New quests every day</span></div>
       ${quests.map(q => { const d = QUESTS.find(x => x.id === q.id); return `<div class="quest ${q.done ? 'done' : ''}"><span class="qi">${q.done ? '✅' : d.icon}</span><div class="stack" style="gap:4px"><b>${d.text}</b><span class="bar"><i style="width:${q.progress / d.goal * 100}%"></i></span></div><span class="qr">+${d.coins} 🪙</span></div>`; }).join('')}
     </div>`;
@@ -27456,6 +27709,59 @@ const Sfx = (() => {
     return o;
   }
   function closeSheet() { document.querySelectorAll('.overlay').forEach(o => o.remove()); }
+
+  // ----- Streak calendar, treasure chest, pet -----
+  function streakSheet() {
+    const p = P(), live = liveStreak(p), left = goalLeft(p), marks = dayMarks(p), wk = weekStart(today()), fz = freezesOf(p);
+    const next = MILESTONES.find(m => m[0] > live);
+    openSheet(`<div class="stack">
+      <div class="row between"><h2>🔥 ${live}-day streak</h2><button class="iconbtn" data-act="close" aria-label="Close">✕</button></div>
+      <p class="muted">Best ever: <b>${bestStreak(p)} day${bestStreak(p) === 1 ? '' : 's'}</b>. A day counts when you finish ${dailyGoal() > 1 ? dailyGoal() + ' full rounds' : 'a full round'} (5 or more questions).</p>
+      <div class="stack" style="gap:10px">${weekRow(p, addDays(wk, -7), marks)}${weekRow(p, wk, marks)}</div>
+      <div class="hintbox"><span class="hi">${left ? '⏳' : '✅'}</span><span>${left ? `Finish ${left} more round${left > 1 ? 's' : ''} today to keep your streak going.` : 'Done for today. Come back tomorrow!'}</span></div>
+      ${next ? `<div class="hintbox"><span class="hi">🎁</span><span>${next[0] - live} more day${next[0] - live > 1 ? 's' : ''} to the ${next[0]}-day prize: +${next[1]} 🪙${next[2] ? ` and the ${next[2]} hat` : ''}.</span></div>` : ''}
+      <div class="card stack" style="gap:8px;background:var(--panel2)"><b>🧊 Streak freezes · ${fz} of ${FREEZE_MAX}</b>
+        <span class="muted" style="font-size:.9rem">A freeze saves your streak if you miss a day. You earn one every 7 days, and the treasure chest sometimes has one.</span>
+        <button class="btn small" data-act="buyfreeze" ${fz >= FREEZE_MAX ? 'disabled' : ''}>${fz >= FREEZE_MAX ? 'You hold the most you can' : `Buy a freeze · ${FREEZE_COST} 🪙`}</button></div>
+    </div>`);
+  }
+
+  const CHEST_SVG = '<svg class="chestsvg" viewBox="0 0 120 100" aria-hidden="true"><g class="lid"><path d="M12 46 Q12 14 60 14 Q108 14 108 46 Z" fill="#c97a2c" stroke="#5e3210" stroke-width="4" stroke-linejoin="round"/><rect x="53" y="16" width="14" height="30" fill="#ffd23f"/></g><rect x="12" y="46" width="96" height="44" rx="6" fill="#a75d1d" stroke="#5e3210" stroke-width="4"/><rect x="53" y="46" width="14" height="44" fill="#ffd23f"/><rect x="49" y="52" width="22" height="17" rx="3" fill="#ffe680" stroke="#5e3210" stroke-width="3"/></svg>';
+  function chestSheet() {
+    openSheet(`<div class="stack center" style="align-items:center" id="chestbox">
+      <div class="chest shaking">${CHEST_SVG}<span class="prize"></span></div>
+      <h2>Today's treasure chest</h2><p class="muted">You met today's goal. What's inside?</p>
+      <button class="btn primary block" data-act="chestopen">Open it!</button></div>`, true);
+  }
+  function openChest() {
+    const p = P(), box = $('#chestbox');
+    if (!chestReady(p) || !box) return closeSheet();
+    const prize = chestPrize(p);
+    p.chest = { last: today(), opened: ((p.chest || {}).opened || 0) + 1 };
+    let e = '🪙', title, text = '';
+    if (prize.kind === 'coins') { p.coins += prize.n; title = `+${prize.n} coins!`; text = 'Spend them on avatars and hats in the Me tab.'; }
+    else if (prize.kind === 'freeze') { p.streak.freezes = freezesOf(p) + 1; e = '🧊'; title = 'A streak freeze!'; text = 'It saves your streak if you miss a day.'; }
+    else if (prize.kind === 'lucky') {
+      (p.lucky || (p.lucky = [])).push(prize.v); e = prize.v; title = 'A lucky sticker!'; text = `It's in your sticker album: ${p.lucky.length} of ${LUCKY.length}.`;
+      if (p.lucky.length === LUCKY.length) { p.coins += 100; text += ' The lucky page is full: +100 🪙!'; }
+    } else { p.owned.push(prize.v); e = prize.v; title = prize.hat ? 'A rare hat!' : 'A rare avatar!'; text = 'Only the chest has these. Try it on in the Me tab.'; }
+    checkTrophies(p); save(); render();
+    const chest = box.querySelector('.chest'), r = chest.getBoundingClientRect();
+    chest.classList.remove('shaking'); chest.classList.add('open');
+    chest.querySelector('.prize').textContent = e;
+    box.querySelector('h2').textContent = title;
+    box.querySelector('p').textContent = text;
+    box.querySelector('button').outerHTML = '<button class="btn go block" data-act="close">Yay!</button>';
+    Sfx.fanfare(); FX.burst(r.left + r.width / 2, r.top + r.height / 3, 18, [e, '✨', '⭐']);
+  }
+  function petSheet() {
+    const kind = S.petKind || 'scales';
+    openSheet(`<div class="stack"><div class="row between"><h2>Pick your egg</h2><button class="iconbtn" data-act="close" aria-label="Close">✕</button></div>
+      <p class="muted">It hatches after your first full day and grows on every day you meet your goal. It never gets smaller.</p>
+      <div class="grid3">${Object.entries(PETS).map(([k, x]) => `<button class="avbtn ${kind === k ? 'on' : ''}" data-act="petkind" data-k="${k}" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px"><span>🥚</span><small style="font-size:.75rem;font-weight:800;font-family:var(--font-display)">${x.hint} ${x.name}</small></button>`).join('')}</div>
+      <div class="field"><label for="pet-name">Name your pet</label><input id="pet-name" maxlength="14" autocomplete="off" value="${h(S.petName || PETS[kind].pet)}"></div>
+      <button class="btn primary block" data-act="petok">Choose this egg</button></div>`, true);
+  }
 
   function skillSheet(id) {
     const p = P(), sk = PMLM.byId[id], gs = gradeState(p, sk.grade), ss = skillState(gs, id);
@@ -27545,7 +27851,7 @@ const Sfx = (() => {
     if (!items.length) return;
     R = {
       mode, grade: g, skill: opts.skill, unit: opts.unit, items, i: -1, results: [], combo: 0, bestCombo: 0, brain: 0, coins: 0,
-      start: Date.now(), hp: 8, hpMax: 8, placed: [], ended: false, deadline: mode === 'extra' ? Date.now() + 60000 : 0, extraN: 0,
+      start: Date.now(), hp: 8, hpMax: 8, placed: [], ended: false, deadline: mode === 'extra' ? Date.now() + 60000 : 0, extraN: 0, stars0: totalStars(gs),
     };
     S.screen = 'round';
     Sfx.unlock(); Sfx.setTier(0); World.setEnergy(0);
@@ -27845,8 +28151,21 @@ const Sfx = (() => {
     }
     if (R.mode === 'place') { gs.placed = true; }
     if (R.mode !== 'place') { p.stats.rounds++; quest('round'); }
+    const lv0 = levelOf(p.brain);
     p.coins += R.coins; p.brain += Math.round(R.brain);
-    touchStreak(p);
+    const lv1 = levelOf(p.brain);
+    if (lv1 > lv0) {
+      let coins = 0; for (let L = lv0 + 1; L <= lv1; L++) coins += 5 * L;
+      p.coins += coins; R.summary.level = { to: lv1, coins };
+    }
+    // A real round (5+ questions, or the 60-second challenge) counts towards the day's goal
+    R.summary.counts = R.mode === 'extra' || answered >= 5;
+    if (recordDay(p, R.summary.counts, Date.now() - R.start, Math.max(0, totalStars(gs) - R.stars0), answered)) {
+      R.summary.day = touchStreak(p);
+      R.summary.pet = feedPet(p);
+    }
+    R.summary.pages = checkPages(p, R.grade);
+    if (teamReached() && p.teamSeen !== weekStart(today())) { p.teamSeen = weekStart(today()); R.summary.team = true; }
     R.summary.wishes = checkWishes(p, R.grade);
     R.summary.trophies = checkTrophies(p);
     save();
@@ -27858,9 +28177,23 @@ const Sfx = (() => {
   function celebrateQueue(sum) {
     const p = P(), prog = gradeProgress(p, R.grade), items = [];
     if (sum.bossWon) items.push({ e: theme().bosses[0], title: 'Boss beaten!', text: `+25 🪙 for defeating the boss` });
-    (R.newMastered || []).forEach(sk => items.push({ e: '🧠', title: 'Skill mastered!', text: `${sk.icon} ${sk.title}` }));
+    (R.newMastered || []).forEach(sk => items.push({ e: '🧠', title: 'Skill mastered!', text: `${sk.icon} ${sk.title} · a new sticker for your album!` }));
+    const pages = sum.pages || [];
+    if (pages.length) items.push({ e: '📒', title: pages.length > 1 ? `${pages.length} album pages complete!` : 'Album page complete!', text: `${pages.map(u => u.icon + ' ' + u.name).join(', ')} · +${30 * pages.length} 🪙` });
     sum.wishes.forEach(w => items.push({ e: w.emoji || '🎁', title: w.at === 100 ? 'BIG WISH UNLOCKED!' : 'Wish unlocked!', text: w.text, wish: true }));
+    const day = sum.day;
+    if (day && day.milestone) { const [n, c, hat] = day.milestone; items.push({ e: '🔥', title: `${n}-day streak!`, text: `+${c} 🪙${hat ? ` and a new hat: ${hat}` : ''}` }); }
+    (day ? day.wishes : []).forEach(w => items.push({ e: w.emoji || '🎁', title: 'Streak wish unlocked!', text: w.text, wish: true }));
+    if (sum.pet) {
+      const pet = p.pet;
+      items.push({ e: petFace(p), title: sum.pet === 1 ? 'Your egg hatched!' : `${pet.name} grew!`, text: sum.pet === 1 ? `Say hello to ${pet.name}!` : sum.pet === 4 ? 'All grown up. You looked after it so well!' : 'Play every day to help it grow.' });
+    }
+    if (sum.level) items.push({ e: '🆙', title: `Level ${sum.level.to}!`, text: `${rankOf(p.brain)} · +${sum.level.coins} 🪙` });
+    if (sum.team) items.push({ e: team().emoji || '🤝', title: 'Family goal reached!', text: team().text, wish: true });
     if (prog.pct >= 100 && sum.wishes.some(w => w.at === 100)) items.push({ e: '🎓', title: `Grade ${R.grade} complete!`, text: 'You mastered every skill. Amazing work!' });
+    showCelebrations(items);
+  }
+  function showCelebrations(items) {
     const showNext = () => {
       const it = items.shift(); if (!it) return;
       Sfx.fanfare(); FX.party(); if (it.wish) setTimeout(() => Sfx.cheer(), 400);
@@ -27889,6 +28222,9 @@ const Sfx = (() => {
         ${R.mode === 'extra' ? `<div class="stat"><b>${R.extraN}</b><small>answers</small></div>` : ''}
       </div>`;
     if (R.levelUp) body += `<div class="hintbox"><span class="hi">📈</span><span>Level up! Questions in <b>${h(R.levelUp)}</b> get a bit harder now.</span></div>`;
+    const day = s.day, left = goalLeft(P());
+    if (day && day.days) body += `<div class="hintbox"><span class="hi">🔥</span><span><b>Day ${day.days} done!</b>${day.frozen ? ` Your 🧊 freeze${day.frozen > 1 ? 's' : ''} saved your streak.` : ''}${day.freezeEarned ? ' You earned a 🧊 streak freeze!' : ''} Your treasure chest is waiting on the map.</span></div>`;
+    else if (left) body += `<div class="hintbox"><span class="hi">🔥</span><span>${s.counts ? `${left} more round${left > 1 ? 's' : ''} for today's goal.` : "Finish a full round (5 or more questions) to count towards today's goal."}</span></div>`;
     if (R.mode === 'practice' && sk) {
       const ss = skillState(gradeState(P(), R.grade), sk.id), firsts = ss.hist.slice(-10).filter(Boolean).length;
       body += `<div class="card stack" style="gap:6px"><span class="eyebrow">${h(sk.icon)} ${h(sk.title)} · mastery</span><div class="pdots">${Array.from({ length: 10 }, (_, i) => `<i class="${ss.hist.slice(-10)[i] === 1 ? 'ok' : ss.hist.slice(-10)[i] === 0 ? 'bad' : ''}"></i>`).join('')}</div>
@@ -27911,7 +28247,7 @@ const Sfx = (() => {
 
   // ----- Wishes tab -----
   function renderWishes() {
-    const p = P(), g = p.grade, gs = gradeState(p, g), prog = gradeProgress(p, g);
+    const p = P(), g = p.grade, gs = gradeState(p, g), prog = gradeProgress(p, g), streakWishes = (p.streakWishes || []).filter(w => w.text.trim());
     view.innerHTML = `<div class="stack">
       ${gradePick(g)}
       <div><h2>My wishes</h2><p class="muted">Master skills to fill the bar. Every wish unlocks at its own point.</p></div>
@@ -27923,35 +28259,73 @@ const Sfx = (() => {
           <span class="wat">${w.at === 100 ? 'BIG WISH · finish the grade' : `Small wish · ${w.at}%`}</span><span class="wt">${empty ? '…' : h(w.text)}</span>
           ${w.status === 'locked' ? `<span class="bar ${w.at === 100 ? 'gold' : ''}"><i style="width:${Math.min(100, prog.pct / w.at * 100)}%"></i></span>` : ''}<span class="wat">${status}</span></div>`;
       }).join('')}</div>
+      ${streakWishes.length ? `<div><h2>🔥 Streak wishes</h2><p class="muted">Meet your goal every day in a row to unlock these.</p></div>
+      <div class="wishes">${streakWishes.map(w => {
+        const n = wishProg(p, w), status = w.status === 'granted' ? '✅ Granted' : w.status === 'unlocked' ? '🎉 Unlocked! Show a grown-up' : `${n} of ${w.at} days`;
+        return `<div class="wish ${w.status}">${w.status === 'locked' ? '<span class="lock">🔒</span>' : ''}<span class="we">${h(w.emoji || '🎁')}</span>
+          <span class="wat">${w.at} days in a row</span><span class="wt">${h(w.text)}</span>
+          ${w.status === 'locked' ? `<span class="bar"><i style="width:${Math.min(100, n / w.at * 100)}%"></i></span>` : ''}<span class="wat">${status}</span></div>`;
+      }).join('')}</div>` : ''}
       <button class="btn ghost block" data-act="tab" data-id="parent">🔒 Grown-ups: set wishes</button>
     </div>`;
   }
 
   // ----- Me tab -----
   function renderMe() {
-    const p = P(), rank = RANKS.filter(r => p.brain >= r[0]).pop(), nextRank = RANKS.find(r => p.brain < r[0]);
+    const p = P(), lv = levelOf(p.brain), lo = levelAt(lv), hi = levelAt(lv + 1);
     const acc = p.stats.answered ? Math.round(p.stats.first / p.stats.answered * 100) : 0;
+    const lockd = (a, label, msg) => `<button class="avbtn lockd" data-act="howto" data-msg="${h(msg)}" aria-label="${h(msg)}">${a}<span class="price">${label}</span></button>`;
     view.innerHTML = `<div class="stack">
       <div class="card hero"><div style="position:relative;font-size:4.2rem;line-height:1;width:96px;text-align:center">${p.hat ? `<span style="position:absolute;top:-26px;left:0;right:0;font-size:2rem">${h(p.hat)}</span>` : ''}${h(p.avatar)}</div>
-        <div class="stack" style="gap:4px;min-width:0"><h2>${h(p.name)}</h2><span class="chip" style="align-self:flex-start">🧠 ${rank[1]}</span>
-        <span class="muted" style="font-size:.9rem">${fmt(p.brain)} brain power${nextRank ? ` · ${fmt(nextRank[0] - p.brain)} to ${nextRank[1]}` : ''}</span></div></div>
+        <div class="stack" style="gap:6px;min-width:0"><h2>${h(p.name)}</h2><span class="chip" style="align-self:flex-start">🆙 Level ${lv} · ${rankOf(p.brain)}</span>
+        <span class="bar"><i style="width:${Math.min(100, (p.brain - lo) / (hi - lo) * 100)}%"></i></span>
+        <span class="muted" style="font-size:.9rem">${fmt(p.brain)} brain power · ${fmt(hi - p.brain)} to Level ${lv + 1}</span></div></div>
       <div class="stats">
         <div class="stat"><b>${fmt(p.stats.answered)}</b><small>questions</small></div>
         <div class="stat"><b>${acc}%</b><small>first-try</small></div>
         <div class="stat"><b>×${p.stats.bestCombo}</b><small>best combo</small></div>
-        <div class="stat"><b>${p.streak.days}</b><small>day streak</small></div>
+        <div class="stat"><b>${liveStreak(p)}</b><small>day streak (best ${bestStreak(p)})</small></div>
       </div>
+      <div class="grid2"><button class="btn" data-act="album">📒 Sticker album</button>
+        <button class="btn" data-act="buyfreeze" ${freezesOf(p) >= FREEZE_MAX ? 'disabled' : ''}>${freezesOf(p) >= FREEZE_MAX ? `🧊 ${FREEZE_MAX}/${FREEZE_MAX} freezes` : `🧊 Freeze · ${FREEZE_COST} 🪙`}</button></div>
       <div class="stack" style="gap:8px"><h3>World</h3><div class="themes">${Object.entries(THEMES).map(([id, t]) => `<button class="themecard t-${id} ${p.theme === id ? 'on' : ''}" data-act="theme" data-id="${id}"><span class="te">${t.emoji}</span>${t.name}<small>${t.blurb}</small></button>`).join('')}</div></div>
       <div class="stack" style="gap:8px"><div class="row between"><h3>Avatar</h3><span class="chip">🪙 ${fmt(p.coins)}</span></div>
         <div class="avatars">${AVATARS.map(a => `<button class="avbtn ${p.avatar === a ? 'on' : ''}" data-act="avatar" data-v="${a}">${a}</button>`).join('')}
-        ${SHOP_AVATARS.map(([a, c]) => { const own = p.owned.includes(a); return `<button class="avbtn ${p.avatar === a ? 'on' : ''} ${own ? '' : 'lockd'}" data-act="buy" data-v="${a}" data-c="${c}">${a}${own ? '' : `<span class="price">${c}🪙</span>`}</button>`; }).join('')}</div></div>
+        ${SHOP_AVATARS.map(([a, c]) => { const own = p.owned.includes(a); return `<button class="avbtn ${p.avatar === a ? 'on' : ''} ${own ? '' : 'lockd'}" data-act="buy" data-v="${a}" data-c="${c}">${a}${own ? '' : `<span class="price">${c}🪙</span>`}</button>`; }).join('')}
+        ${CHEST_AVATARS.map(a => (p.owned.includes(a) ? `<button class="avbtn ${p.avatar === a ? 'on' : ''}" data-act="avatar" data-v="${a}">${a}</button>` : lockd(a, '🎁', 'Win this avatar from the daily treasure chest!'))).join('')}</div></div>
       <div class="stack" style="gap:8px"><h3>Hats</h3><div class="avatars"><button class="avbtn ${!p.hat ? 'on' : ''}" data-act="hat" data-v="">🚫</button>
-        ${HATS.map(([a, c]) => { const own = p.owned.includes(a); return `<button class="avbtn ${p.hat === a ? 'on' : ''} ${own ? '' : 'lockd'}" data-act="buy" data-v="${a}" data-c="${c}" data-hat="1">${a}${own ? '' : `<span class="price">${c}🪙</span>`}</button>`; }).join('')}</div></div>
+        ${HATS.map(([a, c]) => { const own = p.owned.includes(a); return `<button class="avbtn ${p.hat === a ? 'on' : ''} ${own ? '' : 'lockd'}" data-act="buy" data-v="${a}" data-c="${c}" data-hat="1">${a}${own ? '' : `<span class="price">${c}🪙</span>`}</button>`; }).join('')}
+        ${SPECIAL_HATS.map(([a, label, msg]) => (p.owned.includes(a) ? `<button class="avbtn ${p.hat === a ? 'on' : ''}" data-act="hat" data-v="${a}">${a}</button>` : lockd(a, label, msg))).join('')}</div></div>
       <div class="stack" style="gap:8px"><h3>Trophies · ${Object.keys(p.trophies).length}/${TROPHIES.length}</h3><div class="trophies">${TROPHIES.map(t => `<div class="trophy ${p.trophies[t.id] ? 'got' : ''}"><span class="tt">${t.icon}</span>${h(t.name)}</div>`).join('')}</div></div>
     </div>`;
   }
 
   // ----- Parent area -----
+  // ----- Sticker album: a page per unit (a sticker for each mastered skill) and a lucky page from the chest -----
+  function renderAlbum() {
+    chrome(false);
+    const p = P(), g = S.albumGrade || p.grade, gs = gradeState(p, g), lucky = p.lucky || [];
+    const tilt = i => `--rot:${(i % 3 - 1) * 4}deg`;
+    let html = `<div class="stack" style="padding-block:16px">
+      <div class="row between"><h2>📒 Sticker album</h2><button class="iconbtn" data-act="albumclose" aria-label="Close album">✕</button></div>
+      <p class="muted">Master a skill to get its sticker. Fill a whole page for +30 🪙.</p>
+      ${gradePick(g, 'albumgrade')}`;
+    unitsOf(g).forEach(u => {
+      const list = PMLM.skillsInUnit(u.id), n = list.filter(s => skillState(gs, s.id).mastered).length;
+      html += `<div class="card stack" style="gap:10px"><div class="row between"><h3>${h(u.icon)} ${h(u.name)}</h3><span class="chip">${(p.pages || {})[u.id] ? '✅ Page complete' : `${n}/${list.length}`}</span></div>
+        <div class="album">${list.map((s, i) => {
+          const ss = skillState(gs, s.id);
+          return `<div class="sticker ${ss.mastered ? 'got' : ''}" style="${tilt(i)}"><span class="se">${h(s.icon)}</span><span>${h(s.title)}</span>${ss.mastered ? '' : `<span class="sst">${'⭐'.repeat(ss.stars || 0)}</span>`}</div>`;
+        }).join('')}</div></div>`;
+    });
+    if (!unitsOf(g).length) html += '<p class="muted">No skills for this grade yet.</p>';
+    html += `<div class="card stack" style="gap:10px"><div class="row between"><h3>🍀 Lucky page</h3><span class="chip">${lucky.length}/${LUCKY.length}</span></div>
+      <p class="muted" style="font-size:.9rem">Lucky stickers come only from the daily treasure chest. Fill the page for +100 🪙.</p>
+      <div class="album">${LUCKY.map((x, i) => (lucky.includes(x) ? `<div class="sticker got" style="${tilt(i)}"><span class="se">${x}</span></div>` : '<div class="sticker"><span class="se">❔</span></div>')).join('')}</div></div></div>`;
+    view.innerHTML = html;
+    view.scrollTop = 0;
+  }
+
   function renderParent() {
     // The PIN guards the Parents tab on children's devices; a logged-in parent's device skips it
     if (!S.parentOk && !Sync.isParent) return renderPin();
@@ -27980,6 +28354,16 @@ const Sfx = (() => {
     const pair = Object.values(byName).find(l => l.length > 1);
     const ranked = pair ? pair.slice().sort((a, b) => lastActivity(b) - lastActivity(a)) : state.profiles;
     const cbKeep = ranked[0], cbFrom = ranked[1];
+    // Weekly report: the chosen week (this or last), Monday to Sunday
+    const wk = addDays(weekStart(today()), -7 * (S.wk || 0)), t0 = new Date(wk + 'T00:00:00').getTime(), t1 = new Date(addDays(wk, 7) + 'T00:00:00').getTime();
+    const report = state.profiles.map(x => {
+      const days = Array.from({ length: 7 }, (_, i) => (x.days || {})[addDays(wk, i)] || null), sum = k => days.reduce((a, e) => a + (e ? e[k] || 0 : 0), 0);
+      const mastered = Object.values(x.grades || {}).reduce((a, gx) => a + Object.values(gx.skills || {}).filter(ss => ss.mastered >= t0 && ss.mastered < t1).length, 0);
+      return `<tr><td>${h(x.avatar)} ${h(x.name)}</td><td><span class="wkdots">${days.map(e => `<i class="${e && e.r >= dailyGoal() ? 'done' : e && e.q ? 'some' : ''}"></i>`).join('')}</span></td>
+        <td class="n">${sum('r')}</td><td class="n">${Math.round(sum('ms') / 60000)}</td><td class="n">${sum('st')}</td><td class="n">${mastered}</td><td class="n">🔥 ${liveStreak(x)} <span class="muted">(best ${bestStreak(x)})</span></td></tr>`;
+    }).join('');
+    const tm = team(), tp = teamProgress(), given = (tm.given || {})[weekStart(today())];
+    const sws = who.streakWishes || newStreakWishes();
     view.innerHTML = `<div class="stack">
       <div class="row between"><h2>Grown-ups</h2>${Sync.isParent ? '' : '<button class="btn small ghost" data-act="lock">🔒 Lock</button>'}</div>
 
@@ -27988,6 +28372,21 @@ const Sfx = (() => {
         <p class="muted" style="font-size:.88rem">Tap a child to see their wishes and full report below. ${Sync.isParent
           ? 'Children\'s devices linked to your family update here by themselves. To add one, use <b>Link a child\'s device</b> below.'
           : `A child who plays on another device: on that device open <b>Parents → Backup → Copy backup code</b>, send it to yourself, paste it under <b>Backup</b> here and choose <b>Add these players</b>. Do it again any time to refresh their progress.${Sync.enabled ? ' Or use a <b>Family account</b> (below) to keep everyone in sync by itself.' : ''}`}</p></div>
+
+      <div class="card stack"><div class="row between"><h3>📅 ${S.wk ? 'Last week' : 'This week'}</h3>
+        <select aria-label="Week" data-change="wk" style="min-height:40px;border-radius:12px;border:0;background:var(--panel2);padding:0 8px">${sOpt(0, S.wk || 0, 'This week')}${sOpt(1, S.wk || 0, 'Last week')}</select></div>
+        <p class="muted" style="font-size:.88rem">Full dot: daily goal met (${dailyGoal()} round${dailyGoal() > 1 ? 's' : ''}, change it in Settings). Half dot: played a little. Rounds count only full rounds of 5 or more questions.</p>
+        <div class="tablewrap"><table class="report"><thead><tr><th>Child</th><th>Mon–Sun</th><th>Rounds</th><th>Minutes</th><th>New ⭐</th><th>Mastered</th><th>Streak</th></tr></thead><tbody>${report}</tbody></table></div></div>
+
+      <div class="card stack"><h3>🤝 Family team goal</h3>
+        <p class="muted" style="font-size:.9rem">All the children fill one bar together each week (Monday to Sunday), so they help each other instead of competing. Every full round counts. Leave the reward empty to hide it.</p>
+        <div class="wishedit"><div class="field"><label for="tm-e">Emoji</label><input id="tm-e" maxlength="4" value="${h(tm.emoji)}" style="text-align:center;font-size:1.4rem"></div>
+        <div class="field"><label for="tm-t">Reward when the bar is full</label><input id="tm-t" maxlength="60" value="${h(tm.text)}" placeholder="Movie night"></div></div>
+        <div class="field"><label for="tm-n">Rounds per week, all children together</label><select id="tm-n">${[5, 10, 15, 20, 25, 30, 40].map(n => sOpt(n, tm.target, n + ' rounds')).join('')}</select></div>
+        <button class="btn primary" data-act="saveteam">Save team goal</button>
+        ${tm.text.trim() ? `<span class="eyebrow">This week · ${tp.total}/${tm.target} rounds</span><span class="bar gold"><i style="width:${Math.min(100, tp.total / tm.target * 100)}%"></i></span>
+          <div class="row" style="gap:6px">${tp.per.map(x => `<span class="chip">${h(x.p.avatar)} ${h(x.p.name)} · ${x.n}</span>`).join('')}</div>
+          ${tp.total >= tm.target ? (given ? '<span style="font-weight:700">✅ Given this week</span>' : '<button class="btn small go" data-act="teamgiven">🎉 Reached! Mark as given</button>') : ''}` : ''}</div>
 
       ${Sync.isParent ? Sync.devicesCard() : ''}
 
@@ -28002,6 +28401,15 @@ const Sfx = (() => {
           <div class="row" style="font-size:.9rem"><span class="muted">${w.status === 'granted' ? '✅ Granted' : w.status === 'unlocked' ? '🎉 Unlocked, ready to give!' : prog.pct >= w.at ? 'Reached. Unlocks when you save a wish here.' : `Locked · ${prog.pct}% of ${w.at}%`}</span>
           ${w.status === 'unlocked' ? `<button class="btn small go" data-act="grant" data-i="${i}">Mark as granted</button>` : ''}${w.status === 'granted' ? `<button class="link" data-act="ungrant" data-i="${i}">Undo</button>` : ''}</div></div>`).join('')}
         <button class="btn primary" data-act="savewishes">Save wishes</button></div>
+
+      <div class="card stack"><h3>🔥 Streak wishes for ${h(who.name)}</h3>
+        <p class="muted" style="font-size:.9rem">These unlock when ${h(who.name)} meets the daily goal 7, 14 or 30 days in a row, counted from the day you save the wish. A missed day starts the count again, unless a streak freeze covers it.</p>
+        ${sws.map((w, i) => `<div class="stack" style="gap:6px">
+          <div class="wishedit"><div class="field"><label for="se-${i}">${w.at} days</label><input id="se-${i}" maxlength="4" value="${h(w.emoji)}" style="text-align:center;font-size:1.4rem"></div>
+          <div class="field"><label for="st-${i}">Wish for ${w.at} days in a row</label><input id="st-${i}" maxlength="60" value="${h(w.text)}" placeholder="${['Ice cream', 'Trip to the park', 'A new game'][i]}"></div></div>
+          <div class="row" style="font-size:.9rem"><span class="muted">${w.status === 'granted' ? '✅ Granted' : w.status === 'unlocked' ? '🎉 Unlocked, ready to give!' : w.text.trim() ? `Locked · ${wishProg(who, w)} of ${w.at} days` : 'No wish yet'}</span>
+          ${w.status === 'unlocked' ? `<button class="btn small go" data-act="sgrant" data-i="${i}">Mark as granted</button>` : ''}${w.status === 'granted' ? `<button class="link" data-act="sungrant" data-i="${i}">Undo</button><button class="link" data-act="srearm" data-i="${i}">Start again</button>` : ''}</div></div>`).join('')}
+        <button class="btn primary" data-act="savestreakwishes">Save streak wishes</button></div>
 
       <div class="card stack"><h3>📊 Progress · ${prog.pct}% mastered</h3>
         <div class="stats"><div class="stat"><b>${prog.mastered}/${prog.total}</b><small>skills mastered</small></div><div class="stat"><b>${mins}</b><small>minutes played</small></div><div class="stat"><b>${fmt(who.stats.answered)}</b><small>questions</small></div><div class="stat"><b>${gs.review.length}</b><small>mistakes to fix</small></div></div>
@@ -28027,6 +28435,7 @@ const Sfx = (() => {
         <label class="toggle">Sound effects <input type="checkbox" data-change="set" data-k="sfx" ${state.settings.sfx ? 'checked' : ''}></label>
         <label class="toggle">Music during rounds <input type="checkbox" data-change="set" data-k="music" ${state.settings.music ? 'checked' : ''}></label>
         <label class="toggle"><span>Speed bonus <span class="muted" style="font-weight:400">(a timer bar; fast answers earn extra brain power, nothing is lost)</span></span><input type="checkbox" data-change="set" data-k="timer" ${state.settings.timer ? 'checked' : ''}></label>
+        <div class="field" style="margin-top:8px"><label for="dgoal">Daily goal <span class="muted" style="font-weight:400">(full rounds a day to keep the streak and open the chest; for the whole family)</span></label><select id="dgoal" data-change="dailygoal">${[1, 2, 3].map(n => sOpt(n, dailyGoal(), n === 1 ? '1 round a day' : n + ' rounds a day')).join('')}</select></div>
         <div class="field" style="margin-top:8px"><label for="keysound">Button sound <span class="muted" style="font-weight:400">(on this device)</span></label><select id="keysound" data-change="keysound">${[['clicky', 'Clicky: crisp mechanical keyboard'], ['thocky', 'Thocky: deep, soft keyboard'], ['off', 'Off']].map(([v, l]) => sOpt(v, state.settings.keySound || 'clicky', l)).join('')}</select></div>
         <div class="field" style="margin-top:8px"><label for="cur">Money symbol</label><select id="cur" data-change="currency">${['₼', '$', '£', '€', '₽', '₺', '₹'].map(c => sOpt(c, state.settings.currency, c.trim())).join('')}</select></div></div>
 
@@ -28040,7 +28449,8 @@ const Sfx = (() => {
 
       <div class="card stack"><h3>🔑 PIN</h3><button class="btn small ghost" data-act="changepin">Change PIN</button>
         <button class="btn small ghost" data-act="resetplayer">Reset ${h(who.name)}'s Grade ${sel.grade} progress</button></div>
-      ${DEBUG ? `<div class="card stack"><h3>🛠 Debug</h3><div class="row">${[25, 50, 75, 100].map(v => `<button class="btn small" data-act="dbg" data-v="${v}">Set ${v}%</button>`).join('')}<button class="btn small" data-act="dbgcoins">+500 coins</button></div></div>` : ''}
+      ${DEBUG ? `<div class="card stack"><h3>🛠 Debug</h3><div class="row">${[25, 50, 75, 100].map(v => `<button class="btn small" data-act="dbg" data-v="${v}">Set ${v}%</button>`).join('')}<button class="btn small" data-act="dbgcoins">+500 coins</button></div>
+        <div class="row"><button class="btn small" data-act="dbgplay">Play a perfect round</button><button class="btn small" data-act="dbgday">Next day ⏭</button><button class="btn small ghost" data-act="dbgday0">Reset days</button><span class="muted">Game date ${today()}</span></div></div>` : ''}
       <p class="muted center" style="font-size:.8rem">Game version ${h(BUILD)}</p>
     </div>`;
   }
@@ -28297,6 +28707,59 @@ const Sfx = (() => {
       R = { grade: g, summary: { wishes: fresh }, newMastered: [] }; celebrateQueue(R.summary);
     },
     dbgcoins: () => { P().coins += 500; save(); render(); },
+    dbgplay: () => { const p = P(), sk = nextSkill(p, p.grade); if (!sk) return; startRound('practice', { skill: sk.id }); R.results = R.items.map(() => 'ok'); R.brain = 1500; endRound(); },
+    dbgday: () => { try { sessionStorage.setItem('pmlm.dayShift', dayShift() + 1); } catch (e) { /* storage blocked */ } S.keepScroll = true; render(); S.keepScroll = false; toast('Game date: ' + today()); },
+    dbgday0: () => { try { sessionStorage.removeItem('pmlm.dayShift'); } catch (e) { /* storage blocked */ } S.keepScroll = true; render(); S.keepScroll = false; toast('Game date: ' + today()); },
+    // Streak, chest, pet, album
+    streak: () => streakSheet(),
+    buyfreeze: () => {
+      const p = P(), inSheet = !!document.querySelector('.overlay');
+      if (freezesOf(p) >= FREEZE_MAX) return;
+      if (p.coins < FREEZE_COST) { toast(`You need ${FREEZE_COST - p.coins} more 🪙. Answer questions to earn coins!`); return; }
+      p.coins -= FREEZE_COST; p.streak.freezes = freezesOf(p) + 1;
+      save(); render(); if (inSheet) streakSheet();
+      Sfx.coin(); toast('🧊 Streak freeze ready!');
+    },
+    chest: () => { if (chestReady(P())) chestSheet(); },
+    chestopen: () => openChest(),
+    pet: (d, el) => {
+      const p = P(), pet = p.pet || {};
+      if (!pet.kind) { S.petKind = null; S.petName = ''; return petSheet(); }
+      const r = el.getBoundingClientRect(), next = PET_AT[petStage(p) + 1];
+      FX.burst(r.left + r.width / 2, r.top + r.height / 3, 10, ['❤️', '💖', '✨'], 4); Sfx.coin();
+      toast(petSleepy(p) ? `${h(pet.name)} is sleepy. One full round wakes ${h(pet.name)} up!` : !petStage(p) ? 'Meet today\'s goal to hatch your egg!'
+        : next ? `${h(pet.name)} loves you! ${next - pet.days} more day${next - pet.days > 1 ? 's' : ''} of play until it grows.` : `${h(pet.name)} is all grown up and loves you!`);
+    },
+    petkind: d => { const el = $('#pet-name'), was = PETS[S.petKind || 'scales'].pet; S.petName = el && el.value.trim() !== was ? el.value : ''; S.petKind = d.k; petSheet(); },
+    petok: () => {
+      const p = P(), kind = S.petKind || 'scales', name = (($('#pet-name') || {}).value || '').trim().slice(0, 14) || PETS[kind].pet;
+      p.pet = Object.assign(p.pet || { days: 0, last: null }, { kind, name });
+      closeSheet(); checkTrophies(p); save(); render();
+      if (petStage(p) >= 1) showCelebrations([{ e: petFace(p), title: 'Your egg hatched!', text: `Say hello to ${name}!` }]);
+      else toast(`Meet today's goal to hatch ${h(name)}!`);
+    },
+    album: () => { S.screen = 'album'; S.albumGrade = P().grade; render(); },
+    albumgrade: d => { S.albumGrade = +d.id; render(); },
+    albumclose: () => { S.screen = 'home'; S.tab = 'me'; render(); },
+    howto: d => toast(h(d.msg)),
+    // Parents: streak wishes and the family team goal
+    savestreakwishes: () => {
+      const who = state.profiles.find(x => x.id === S.pSel.player), list = who.streakWishes || (who.streakWishes = newStreakWishes());
+      list.forEach((w, i) => {
+        const text = ($('#st-' + i).value || '').trim();
+        if (text && !w.text.trim()) w.prog = 0;   // a new wish counts its days from now
+        w.text = text; w.emoji = ($('#se-' + i).value || '🎈').trim() || '🎈';
+      });
+      save(); S.keepScroll = true; render(); S.keepScroll = false; toast('Streak wishes saved');
+    },
+    sgrant: d => { const w = state.profiles.find(x => x.id === S.pSel.player).streakWishes[+d.i]; w.status = 'granted'; w.grantedAt = Date.now(); save(); S.keepScroll = true; render(); S.keepScroll = false; FX.party(); },
+    sungrant: d => { const w = state.profiles.find(x => x.id === S.pSel.player).streakWishes[+d.i]; w.status = 'unlocked'; save(); S.keepScroll = true; render(); S.keepScroll = false; },
+    srearm: d => { const w = state.profiles.find(x => x.id === S.pSel.player).streakWishes[+d.i]; Object.assign(w, { status: 'locked', prog: 0, unlockedAt: null, grantedAt: null }); save(); S.keepScroll = true; render(); S.keepScroll = false; toast('Counting starts again from today'); },
+    saveteam: () => {
+      state.team = { target: +$('#tm-n').value || 15, text: ($('#tm-t').value || '').trim(), emoji: ($('#tm-e').value || '🎁').trim() || '🎁', given: team().given || {} };
+      save(); S.keepScroll = true; render(); S.keepScroll = false; toast('Team goal saved');
+    },
+    teamgiven: () => { state.team = Object.assign({}, team(), { given: Object.assign({}, team().given, { [weekStart(today())]: Date.now() }) }); save(); S.keepScroll = true; render(); S.keepScroll = false; FX.party(); },
   };
 
   // Runs a sign-in or link action from a sheet, showing progress and any error inside the sheet
@@ -28335,6 +28798,8 @@ const Sfx = (() => {
     pgrade: (d, el) => { const x = state.profiles.find(q => q.id === d.id); x.grade = +el.value; save(); S.keepScroll = true; render(); S.keepScroll = false; },
     set: (d, el) => { state.settings[d.k] = el.checked; save(); applyTheme(); },
     currency: (d, el) => { state.settings.currency = el.value; save(); },
+    dailygoal: (d, el) => { state.settings.dailyGoal = +el.value; save(); S.keepScroll = true; render(); S.keepScroll = false; },
+    wk: (d, el) => { S.wk = +el.value; S.keepScroll = true; render(); S.keepScroll = false; },
     keysound: (d, el) => { state.settings.keySound = el.value; save(); applyTheme(); Sfx.key('key', 'down'); setTimeout(() => Sfx.key('key', 'up'), 90); },
     importfile: (d, el) => { const f = el.files && el.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => importCode(String(r.result)); r.readAsText(f); },
   };
@@ -28411,6 +28876,7 @@ const Sfx = (() => {
   World.init($('#world'));
   FX.init($('#fx'));
   if (SELFTEST) { selfTest(); return; }
+  if (DEBUG) window.__pmlm = { get state() { return state; }, get R() { return R; }, ACT, today, render };
   Sync.boot();
   render();
   Cloud.init(remote => {

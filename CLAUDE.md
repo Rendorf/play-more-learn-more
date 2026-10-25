@@ -43,6 +43,21 @@ Run these from the repo root.
   - The shared doc holds the PIN, money symbol, player order and a `deleted` map. Which player is active stays per device.
   - When a device joins, the family's PIN and settings win, and a same-name-and-grade child prompts "Is this the same …?" (combine).
 - **Combine players** (`combineProfiles`) keeps the best record per skill. `state.aliases` maps removed ids so later backup codes update the kept player.
+- **Daily goal and streak:**
+  - **Real rounds:** a round counts towards the day if it ends normally with 5 or more questions answered (or is the 60-second challenge). Try-it rounds and leaving early don't count.
+  - **Day done:** the family's `dailyGoal` (1–3, in the shared doc) of real rounds marks the day done and grows `p.streak`. Each day's rounds, minutes, new stars and questions are logged in `p.days`, pruned to 120 days.
+  - **Missed days:** covered by 🧊 freezes (`p.streak.freezes`, at most 2: one earned every 7 days, bought for 30 coins, or won from the chest) when the child next meets the goal. Otherwise the streak restarts.
+  - **Display:** the chip shows `liveStreak()`.
+  - **Prizes:** milestones at 3/7/14/30/50/100 days give coins, and 7/30/100 also give a hat.
+  - **Streak wishes:** `p.streakWishes` count days in a row from when the parent saved them.
+- **Daily rewards:**
+  - **Chest:** opens once per day after the day is done (coins, a lucky sticker, a freeze, or a rare chest-only item).
+  - **Pet** (`p.pet`): grows with total days done, never shrinks, and looks sleepy after a missed day.
+  - **Sticker album:** a sticker per mastered skill, unit pages worth +30, and a 24-sticker lucky page.
+  - **Levels:** come from brain power; level L needs 750·L·(L−1).
+- **Family team goal** (`state.team`, in the shared doc): every player's real rounds this week (Monday to Sunday) fill one bar. Each child sees the celebration once per week (`p.teamSeen`).
+- **Lazy defaults:** reading a player never writes defaults into it, so looking at a sibling's data can't make their copy look newer. Only real events create the new fields.
+- **Debug clock:** in `#debug`, Parents → Debug has "Next day ⏭" (a day shift kept in sessionStorage) and "Play a perfect round", and `window.__pmlm` exposes the state for testing.
 - **Failed questions:** if a skill's questions can't be made on a device, the child sees "didn't load", and a note goes to `player.diag` (synced) with the user agent and `BUILD`.
 
 ## Conventions and gotchas

@@ -77,6 +77,9 @@ nav.tabs[hidden], header.top[hidden] { display: none !important; }
 .chip.player { padding: 3px 12px 3px 4px; border: 0; color: inherit; --face: var(--panel); --d: 3px; }
 .chip .av { width: 32px; height: 32px; display: grid; place-items: center; font-size: 1.3rem; border-radius: 50%; background: var(--panel2); position: relative; }
 .chip .av .hat { position: absolute; top: -12px; font-size: .95rem; }
+.chip .av .lv { position: absolute; right: -7px; bottom: -5px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 99px; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); font: 800 .68rem/1 var(--font-display); box-shadow: 0 0 0 2px var(--panel); }
+.chip.streak { border: 0; color: inherit; --face: var(--panel); --d: 3px; }
+.chip.streak.risk .fl { filter: grayscale(.75); }
 .iconbtn { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border-radius: 50%; border: 0; --face: var(--panel); --d: 4px; font-size: 1.15rem; }
 
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; padding: 10px 22px; border: 0; border-radius: var(--r); --face: var(--panel2); --d: 6px; position: relative; color: var(--ink); font-family: var(--font-display); font-weight: 800; font-size: 1.15rem; text-decoration: none; }
@@ -161,6 +164,55 @@ nav.tabs[hidden], header.top[hidden] { display: none !important; }
 .quest .qi { font-size: 1.5rem; }
 .quest.done { opacity: .6; }
 .quest .qr { font-family: var(--font-display); font-weight: 800; color: var(--accent); white-space: nowrap; }
+
+/* Today card: pet, this week's streak, the daily chest */
+.today { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 14px; align-items: center; }
+.today .chestbtn { grid-column: 1 / -1; }
+.pet { position: relative; width: 92px; height: 92px; border: 0; border-radius: 26px; --face: var(--panel2); --d: 5px; display: grid; place-items: center; padding: 0 0 14px; color: var(--ink); }
+.pet .pe { font-size: 2.9rem; line-height: 1; animation: bob 2.4s ease-in-out infinite; }
+.pet .pn { position: absolute; bottom: 6px; left: 4px; right: 4px; font: 800 .72rem/1.1 var(--font-display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pet.sleepy .pe { animation: doze 3.2s ease-in-out infinite; filter: saturate(.6); }
+.pet .zz { position: absolute; top: 2px; right: 6px; font-size: 1.1rem; animation: zz 2.4s ease-in-out infinite; }
+@keyframes doze { 0%,100% { transform: rotate(-6deg) translateY(2px) } 50% { transform: rotate(4deg) translateY(4px) } }
+@keyframes zz { 0% { transform: translate(0, 4px) scale(.8); opacity: 0 } 40% { opacity: 1 } 100% { transform: translate(6px, -10px) scale(1.1); opacity: 0 } }
+.weekbtn { display: block; width: 100%; padding: 0; border: 0; background: none; color: inherit; text-align: inherit; }
+.days7 { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.dcell { display: flex; flex-direction: column; align-items: center; gap: 3px; font: 700 .7rem/1 var(--font-display); color: var(--muted); }
+.dcell i { width: 100%; max-width: 34px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: .95rem; background: var(--panel2); box-shadow: inset 0 0 0 2px var(--line); }
+.dcell.done i { background: #5a4310; background: color-mix(in srgb, var(--accent) 32%, var(--panel2)); box-shadow: inset 0 0 0 2px var(--accent); }
+.dcell.frozen i { background: #1d4d66; background: color-mix(in srgb, var(--sky) 30%, var(--panel2)); box-shadow: inset 0 0 0 2px var(--sky); }
+.dcell.today { color: var(--ink); }
+.dcell.today i { box-shadow: inset 0 0 0 3px var(--go); }
+.dcell.today.done i { box-shadow: inset 0 0 0 3px var(--accent), 0 0 0 2px var(--go); }
+.dcell.future { opacity: .45; }
+@supports (aspect-ratio: 1) { .dcell i { height: auto; aspect-ratio: 1; } }
+
+/* Treasure chest */
+.chest { position: relative; width: 150px; height: 125px; }
+.chestsvg { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 6px 0 rgba(0,0,0,.25)); }
+.chestsvg .lid { transform-origin: 12px 46px; transition: transform .45s cubic-bezier(.2,1.6,.4,1); }
+.chest.shaking { animation: chestshake 1.6s ease-in-out infinite; }
+.chest.open .lid { transform: translate(-4px, -14px) rotate(-24deg); }
+.chest .prize { position: absolute; left: 50%; top: 30%; font-size: 3.4rem; line-height: 1; transform: translate(-50%, 0) scale(0); opacity: 0; }
+.chest.open .prize { animation: prizeup .7s .15s cubic-bezier(.2,1.4,.4,1) forwards; }
+@keyframes chestshake { 0%,55%,100% { transform: none } 62% { transform: rotate(-5deg) } 70% { transform: rotate(5deg) } 78% { transform: rotate(-4deg) } 86% { transform: rotate(3deg) } }
+@keyframes prizeup { to { transform: translate(-50%, -70%) scale(1); opacity: 1 } }
+
+/* Sticker album */
+.album { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 10px; }
+.sticker { position: relative; min-height: 96px; border-radius: 18px; padding: 8px 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-align: center; font-size: .7rem; font-weight: 700; line-height: 1.15; color: var(--muted); background: var(--panel2); border: 2px dashed var(--line); overflow: hidden; overflow-wrap: anywhere; }
+.sticker .se { font-size: 2.1rem; line-height: 1; filter: grayscale(1) brightness(.35) opacity(.55); }
+.sticker .sst { font-size: .6rem; letter-spacing: -1px; }
+.sticker.got { color: var(--ink); border: 0; transform: rotate(var(--rot, 0deg)); background: #5a4310; background: radial-gradient(circle at 28% 22%, rgba(255,255,255,.4), transparent 42%), linear-gradient(140deg, color-mix(in srgb, var(--accent) 45%, var(--panel2)), var(--panel2)); box-shadow: inset 0 0 0 3px var(--accent), 0 4px 0 rgba(0,0,0,.22); }
+.sticker.got .se { filter: drop-shadow(0 2px 0 rgba(0,0,0,.25)); }
+.sticker.got::after { content: ""; position: absolute; inset: -40%; background: linear-gradient(115deg, transparent 42%, rgba(255,255,255,.35) 50%, transparent 58%); animation: shine 4.5s ease-in-out infinite; pointer-events: none; }
+@keyframes shine { 0%,60% { transform: translateX(-70%) } 100% { transform: translateX(70%) } }
+
+/* Weekly report dots */
+.wkdots { display: inline-flex; gap: 3px; }
+.wkdots i { width: 12px; height: 12px; border-radius: 50%; background: var(--panel2); box-shadow: inset 0 0 0 1px var(--line); }
+.wkdots i.done { background: var(--go); box-shadow: none; }
+.wkdots i.some { background: linear-gradient(90deg, var(--accent) 50%, var(--panel2) 50%); }
 
 /* Map */
 .unit { position: relative; margin-top: 26px; }
@@ -332,7 +384,7 @@ sup, sub { font-size: .65em; }
 /* Keycaps: every pressable control has a lit face in its own colour (--face), a darker side --d deep and a soft
    shadow. Pressing (:active, or .pressed set on pointerdown for instant touch feedback) sinks it onto its side;
    selected toggles (current tab, grade, avatar...) sit pressed in. Plain selector lists keep older tablets working. */
-.btn, .k, .choice, .iconbtn, .tab, .seg button, .gradepick button, .avbtn, .themecard, .famcard, .chip.player, .node {
+.btn, .k, .choice, .iconbtn, .tab, .seg button, .gradepick button, .avbtn, .themecard, .famcard, .chip.player, .chip.streak, .pet, .node {
   --side: color-mix(in srgb, var(--face, var(--panel2)) 62%, var(--sidemix));
   --cap: inset 0 2px 0 rgba(255, 255, 255, .3), inset 0 -3px 0 rgba(0, 0, 0, .15), 0 var(--d, 5px) 0 var(--side), 0 calc(var(--d, 5px) + 7px) 14px -7px var(--amb);
   --cap-down: inset 0 2px 0 rgba(255, 255, 255, .14), inset 0 -1px 0 rgba(0, 0, 0, .12), 0 1px 0 var(--side), 0 3px 6px -4px var(--amb);
@@ -348,10 +400,10 @@ sup, sub { font-size: .65em; }
 /* number keys: a dished top like a real keyboard key */
 .k { background-image: radial-gradient(ellipse 70% 55% at 50% 40%, rgba(255, 255, 255, .13), transparent 70%), linear-gradient(180deg, color-mix(in srgb, var(--face) 86%, #fff), var(--face) 52%, color-mix(in srgb, var(--face) 90%, #000)); }
 @media (hover: hover) {
-  .btn:hover, .k:hover, .choice:hover, .iconbtn:hover, .tab:hover, .seg button:hover, .gradepick button:hover, .avbtn:hover, .themecard:hover, .famcard:hover, .chip.player:hover, .node:hover { --lift: -1px; }
+  .btn:hover, .k:hover, .choice:hover, .iconbtn:hover, .tab:hover, .seg button:hover, .gradepick button:hover, .avbtn:hover, .themecard:hover, .famcard:hover, .chip.player:hover, .chip.streak:hover, .pet:hover, .node:hover { --lift: -1px; }
 }
-.btn:active, .k:active, .choice:active, .iconbtn:active, .tab:active, .seg button:active, .gradepick button:active, .avbtn:active, .themecard:active, .famcard:active, .chip.player:active, .node:active,
-.btn.pressed, .k.pressed, .choice.pressed, .iconbtn.pressed, .tab.pressed, .seg button.pressed, .gradepick button.pressed, .avbtn.pressed, .themecard.pressed, .famcard.pressed, .chip.player.pressed, .node.pressed,
+.btn:active, .k:active, .choice:active, .iconbtn:active, .tab:active, .seg button:active, .gradepick button:active, .avbtn:active, .themecard:active, .famcard:active, .chip.player:active, .chip.streak:active, .pet:active, .node:active,
+.btn.pressed, .k.pressed, .choice.pressed, .iconbtn.pressed, .tab.pressed, .seg button.pressed, .gradepick button.pressed, .avbtn.pressed, .themecard.pressed, .famcard.pressed, .chip.player.pressed, .chip.streak.pressed, .pet.pressed, .node.pressed,
 .tab.on, .seg button.on, .gradepick button.on, .choice[disabled] {
   --lift: calc(var(--d, 5px) - 1px);
   box-shadow: var(--cap-down);
