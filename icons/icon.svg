@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- App icon: four keycap tiles (+ − × ÷) on the Space world's night sky. Everything sits inside the
+       maskable safe zone (a 410 px circle), so the same picture works for every icon size. -->
+  <defs>
+    <radialGradient id="sky" cx="50%" cy="20%" r="85%">
+      <stop offset="0" stop-color="#2b3080"/>
+      <stop offset=".7" stop-color="#0b1026"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#sky)"/>
+  <g fill="#ffffff" opacity=".7">
+    <circle cx="70" cy="80" r="4"/><circle cx="440" cy="62" r="3"/><circle cx="462" cy="430" r="4"/><circle cx="52" cy="446" r="3"/>
+  </g>
+  <!-- keycaps: a darker side, then the lit face -->
+  <g>
+    <rect x="120" y="130" width="128" height="128" rx="28" fill="#c79a10"/>
+    <rect x="120" y="120" width="128" height="128" rx="28" fill="#ffd23f"/>
+    <rect x="264" y="130" width="128" height="128" rx="28" fill="#1ea777"/>
+    <rect x="264" y="120" width="128" height="128" rx="28" fill="#3ee6a8"/>
+    <rect x="120" y="274" width="128" height="128" rx="28" fill="#c2449c"/>
+    <rect x="120" y="264" width="128" height="128" rx="28" fill="#ff6bd0"/>
+    <rect x="264" y="274" width="128" height="128" rx="28" fill="#2c9cc9"/>
+    <rect x="264" y="264" width="128" height="128" rx="28" fill="#62d4ff"/>
+  </g>
+  <g fill="#0b1026">
+    <!-- + -->
+    <rect x="146" y="173" width="76" height="22" rx="11"/>
+    <rect x="173" y="146" width="22" height="76" rx="11"/>
+    <!-- − -->
+    <rect x="290" y="173" width="76" height="22" rx="11"/>
+    <!-- × -->
+    <rect x="146" y="317" width="76" height="22" rx="11" transform="rotate(45 184 328)"/>
+    <rect x="146" y="317" width="76" height="22" rx="11" transform="rotate(-45 184 328)"/>
+    <!-- ÷ -->
+    <rect x="290" y="317" width="76" height="22" rx="11"/>
+    <circle cx="328" cy="294" r="12"/>
+    <circle cx="328" cy="362" r="12"/>
+  </g>
+</svg>

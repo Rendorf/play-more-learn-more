@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>PMLM Test Dashboard</title>
+<link rel="icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Baloo+2:wght@700;800&display=swap">
+<style>
+/* The owner's view of the family test (build.py generates stats.html from src/stats.html). Reads only work for
+   accounts listed in the admins collection (firestore.rules). */
+:root {
+  --bg: #f6f7fb; --panel: #ffffff; --ink: #1b1f3b; --muted: #5d6385; --line: #e3e6f2; --accent: #c98a00; --go: #0e8f60; --oops: #c8323b;
+  --font-display: "Baloo 2", system-ui, sans-serif; --font-body: "Atkinson Hyperlegible", system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #0b1026; --panel: #151c44; --ink: #eef1ff; --muted: #a3aedb; --line: rgba(200,214,255,.16); --accent: #ffd23f; --go: #3ee6a8; --oops: #ff8593; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #0b1026; --panel: #151c44; --ink: #eef1ff; --muted: #a3aedb; --line: rgba(200,214,255,.16); --accent: #ffd23f; --go: #3ee6a8; --oops: #ff8593; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 var(--font-body); }
+main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 60px; display: flex; flex-direction: column; gap: 18px; }
+h1, h2 { font-family: var(--font-display); margin: 0; line-height: 1.1; }
+h1 { font-size: 1.8rem; } h2 { font-size: 1.25rem; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.card { background: var(--panel); border-radius: 18px; padding: 16px; box-shadow: inset 0 0 0 1px var(--line); display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.tile { background: var(--panel); border-radius: 16px; padding: 12px 14px; box-shadow: inset 0 0 0 1px var(--line); }
+.tile b { display: block; font-family: var(--font-display); font-size: 1.8rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.tile small { color: var(--muted); font-weight: 700; }
+.wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+th, td { padding: 7px 8px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+button { font: inherit; font-weight: 700; border: 0; border-radius: 12px; padding: 10px 16px; background: var(--accent); color: #1b1300; cursor: pointer; }
+button.ghost { background: transparent; color: var(--oops); box-shadow: inset 0 0 0 1px var(--line); padding: 4px 10px; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: space-between; }
+.funnel { display: grid; gap: 6px; }
+.fbar { display: grid; grid-template-columns: minmax(120px, 220px) minmax(0, 1fr) 60px; gap: 10px; align-items: center; font-size: .9rem; }
+.fbar i { display: block; height: 14px; border-radius: 99px; background: var(--go); min-width: 2px; }
+code { font-size: .85rem; background: var(--bg); padding: 2px 6px; border-radius: 6px; overflow-wrap: anywhere; }
+.err { color: var(--oops); font-weight: 700; }
+</style>
+<!--CONFIG-->
+</head>
+<body>
+<main id="app"><h1>PMLM test dashboard</h1><p class="muted">Loading…</p></main>
+<script>
+(() => {
+  const app = document.getElementById('app');
+  const h = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const EMU = /[?&]emu=1/.test(location.search);
+  const SDK = 'https://www.gstatic.com/firebasejs/10.14.1/';
+  const load = src => new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
+  const show = html => { app.innerHTML = `<div class="row"><h1>PMLM test dashboard</h1><span class="muted">${EMU ? 'emulator · ' : ''}version __BUILD__</span></div>${html}`; };
+  if (typeof PMLM_FIREBASE === 'undefined' || !PMLM_FIREBASE) { show('<p class="err">This copy has no Firebase project set up (src/config.js).</p>'); return; }
+
+  let fb, db;
+  (async () => {
+    for (const f of ['app', 'auth', 'firestore']) await load(`${SDK}firebase-${f}-compat.js`);
+    fb = window.firebase;
+    fb.initializeApp(EMU ? { projectId: 'demo-pmlm', apiKey: 'demo-key', authDomain: 'localhost' } : PMLM_FIREBASE);
+    if (EMU) { fb.auth().useEmulator('http://127.0.0.1:9099'); fb.firestore().useEmulator('127.0.0.1', 8080); }
+    db = fb.firestore();
+    fb.auth().onAuthStateChanged(u => (u ? open(u) : signInScreen()));
+  })().catch(() => show('<p class="err">Could not load Firebase. Check the internet connection and reload.</p>'));
+
+  function signInScreen(msg) {
+    show(`<div class="card"><p>Sign in with the Google account that is listed as an admin of the game's Firebase project.</p>
+      ${msg ? `<p class="err">${h(msg)}</p>` : ''}<div><button id="signin">${EMU ? 'Test sign-in (emulator)' : 'Sign in with Google'}</button></div></div>`);
+    document.getElementById('signin').onclick = () => {
+      const p = EMU ? fb.auth().signInAnonymously() : fb.auth().signInWithPopup(new fb.auth.GoogleAuthProvider());
+      p.catch(e => signInScreen(e.message));
+    };
+  }
+
+  async function open(u) {
+    show('<p class="muted">Loading the test data…</p>');
+    let admin = false;
+    try { admin = (await db.collection('admins').doc(u.uid).get()).exists; } catch (e) { admin = false; }
+    if (!admin) {
+      show(`<div class="card"><h2>Not an admin yet</h2><p>Signed in as ${h(u.email || 'a test account')}. To see the test data, add this account as an admin once:</p>
+        <ol><li>Open the Firebase console → Firestore Database → <b>Start collection</b> (or open <code>admins</code>).</li>
+        <li>Collection <code>admins</code>, document ID <code id="uid">${h(u.uid)}</code>, any field (for example <code>ok</code> = <code>true</code>).</li>
+        <li>Reload this page.</li></ol><div><button id="out" class="ghost">Sign out</button></div></div>`);
+      document.getElementById('out').onclick = () => fb.auth().signOut();
+      return;
+    }
+    try {
+      const [ev, fbk, lb, push] = await Promise.all(['events', 'feedback', 'leaderboard', 'push'].map(c => db.collection(c).get()));
+      render(ev.docs.map(d => d.data()), fbk.docs.map(d => d.data()), lb.docs.map(d => Object.assign({ _id: d.id }, d.data())), push.docs.map(d => d.data()));
+    } catch (e) { show(`<p class="err">Could not read the data: ${h(e.message)}. Are the latest firestore.rules published?</p>`); }
+  }
+
+  const dayNum = s => { const [y, m, d] = String(s).split('-').map(Number); return Math.round(Date.UTC(y, m - 1, d) / 86400000); };
+  const pad = n => String(n).padStart(2, '0');
+  const today = (() => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; })();
+  const pct = (a, b) => (b ? Math.round(a / b * 100) + '%' : '–');
+
+  function render(events, feedback, board, push) {
+    const play = new Set(['round', 'lesson', 'place']);
+    const kids = {};
+    for (const e of events) {
+      if (!e.p) continue;
+      const k = kids[e.p] = kids[e.p] || { p: e.p, days: new Set(), first: e.day, last: e.day, rounds: 0, secs: 0, mst: 0, lessons: 0, wish: false, g: e.g, src: e.src || '', dev: e.dev, created: false };
+      if (e.day < k.first) k.first = e.day;
+      if (e.day > k.last) { k.last = e.day; if (e.g) k.g = e.g; }
+      if (play.has(e.type)) k.days.add(e.day);
+      if (e.type === 'round') { k.rounds++; k.secs += e.secs || 0; k.mst += e.m || 0; }
+      if (e.type === 'place') k.secs += e.secs || 0;
+      if (e.type === 'lesson') k.lessons++;
+      if (e.type === 'wishset' && e.n > 0) k.wish = true;
+      if (e.type === 'player') k.created = true;
+      if (e.src) k.src = e.src;
+    }
+    const K = Object.values(kids).filter(k => k.days.size || k.created);
+    const devices = new Set(events.map(e => e.d));
+    const activeOn = d => K.filter(k => k.days.has(d)).length;
+    const last7 = new Set(Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - i); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }));
+    const active7 = K.filter(k => [...k.days].some(d => last7.has(d))).length;
+    const old1 = K.filter(k => dayNum(today) - dayNum(k.first) >= 1), back = old1.filter(k => k.days.size >= 2);
+    const old7 = K.filter(k => dayNum(today) - dayNum(k.first) >= 7), back7 = old7.filter(k => [...k.days].some(d => dayNum(d) - dayNum(k.first) >= 7));
+    const rounds = events.filter(e => e.type === 'round').length, minutes = Math.round(events.reduce((a, e) => a + (play.has(e.type) ? e.secs || 0 : 0), 0) / 60);
+
+    // last 21 days
+    const days = Array.from({ length: 21 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - i); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; });
+    const dayRows = days.map(d => {
+      const ev = events.filter(e => e.day === d);
+      return `<tr><td>${d}</td><td class="n">${K.filter(k => k.first === d).length}</td><td class="n">${activeOn(d)}</td><td class="n">${ev.filter(e => e.type === 'round').length}</td><td class="n">${Math.round(ev.reduce((a, e) => a + (play.has(e.type) ? e.secs || 0 : 0), 0) / 60)}</td><td class="n">${new Set(ev.filter(e => e.type === 'open').map(e => e.d)).size}</td></tr>`;
+    }).join('');
+
+    const funnel = [
+      ['Players created', K.filter(k => k.created).length], ['Finished a lesson', K.filter(k => k.lessons).length],
+      ['Played a round', K.filter(k => k.rounds).length], ['3+ rounds', K.filter(k => k.rounds >= 3).length],
+      ['Came back another day', K.filter(k => k.days.size >= 2).length], ['A grown-up set a wish', K.filter(k => k.wish).length],
+    ];
+    const fmax = Math.max(1, ...funnel.map(f => f[1]));
+
+    const kidRows = K.sort((a, b) => b.last.localeCompare(a.last) || b.rounds - a.rounds).map(k => `<tr><td><code>${h(k.p.slice(0, 8))}</code></td><td class="n">${h(k.g || '')}</td><td>${h(k.src)}</td><td>${h(k.dev || '')}</td><td>${h(k.first)}</td><td>${h(k.last)}</td>
+      <td class="n">${k.days.size}</td><td class="n">${k.rounds}</td><td class="n">${Math.round(k.secs / 60)}</td><td class="n">${k.mst}</td><td>${k.wish ? '✅' : ''}</td></tr>`).join('');
+
+    const problems = events.filter(e => e.type === 'problem').sort((a, b) => b.t - a.t).slice(0, 40)
+      .map(e => `<tr><td>${h(e.day)}</td><td>${h(e.sk)}</td><td class="n">${h(e.n)}</td><td>${h(e.dev)}</td><td>${h(e.v)}</td><td><code>${h(e.msg)}</code></td></tr>`).join('');
+    const fbRows = feedback.sort((a, b) => b.t - a.t).map(f => f.kind === 'question'
+      ? `<tr><td>${h(f.day)}</td><td>🚩 ${h(f.reason)}</td><td>${h(f.sk)} · L${h(f.lvl)} · ${h(f.mode)}</td><td>${h(f.q)}<br><span class="muted">answer: ${h(f.ans)} · child typed: ${h(f.inp || '–')}</span></td><td>${h(f.v)}</td></tr>`
+      : `<tr><td>${h(f.day)}</td><td>💬 message</td><td>${h(f.name || 'anonymous')}</td><td>${h(f.text)}</td><td>${h(f.v)}</td></tr>`).join('');
+
+    const newest = {};
+    for (const d of board) if (!newest[d.pid] || (d.t || 0) > (newest[d.pid].t || 0)) newest[d.pid] = d;
+    const lbRows = Object.values(newest).filter(d => !d.hid).sort((a, b) => (b.pts || 0) - (a.pts || 0)).map(d => `<tr><td>${h(d.av)} ${h(d.nick)}</td><td class="n">${h(d.g)}</td><td class="n">${h(d.pts)}</td><td class="n">${h(d.wpts)}</td><td class="n">${h(d.min)}</td><td>${d.t ? new Date(d.t).toLocaleDateString() : ''}</td>
+      <td><button class="ghost" data-del="${h(d.pid)}">Remove</button></td></tr>`).join('');
+    const hours = {};
+    push.forEach(p => { hours[p.hour] = (hours[p.hour] || 0) + 1; });
+
+    show(`
+      <div class="tiles">
+        <div class="tile"><b>${K.length}</b><small>children</small></div><div class="tile"><b>${devices.size}</b><small>devices</small></div>
+        <div class="tile"><b>${activeOn(today)}</b><small>played today</small></div><div class="tile"><b>${active7}</b><small>played in the last 7 days</small></div>
+        <div class="tile"><b>${pct(back.length, old1.length)}</b><small>came back another day</small></div><div class="tile"><b>${pct(back7.length, old7.length)}</b><small>still playing after 7 days</small></div>
+        <div class="tile"><b>${rounds}</b><small>rounds</small></div><div class="tile"><b>${minutes}</b><small>active minutes</small></div>
+        <div class="tile"><b>${push.length}</b><small>devices with reminders</small></div><div class="tile"><b>${feedback.length}</b><small>feedback messages</small></div>
+      </div>
+      <div class="card"><h2>From first visit to coming back</h2><div class="funnel">${funnel.map(([l, n]) => `<div class="fbar"><span>${l}</span><i style="width:${n / fmax * 100}%"></i><b class="n">${n}</b></div>`).join('')}</div></div>
+      <div class="card"><h2>Each day (last 3 weeks)</h2><div class="wrap"><table><thead><tr><th>Day</th><th class="n">New children</th><th class="n">Children who played</th><th class="n">Rounds</th><th class="n">Minutes</th><th class="n">Devices opened</th></tr></thead><tbody>${dayRows}</tbody></table></div></div>
+      <div class="card"><h2>Each child</h2><p class="muted">Anonymous ids. "src" is the invite link they first used (?src=…).</p><div class="wrap"><table><thead><tr><th>Player</th><th class="n">Grade</th><th>src</th><th>Device</th><th>First day</th><th>Last day</th><th class="n">Days</th><th class="n">Rounds</th><th class="n">Minutes</th><th class="n">Mastered</th><th>Wish set</th></tr></thead><tbody>${kidRows || '<tr><td colspan="11" class="muted">No players yet.</td></tr>'}</tbody></table></div></div>
+      <div class="card"><h2>Feedback and 🚩 reports</h2><div class="wrap"><table><thead><tr><th>Day</th><th>Kind</th><th>Where / who</th><th>Details</th><th>Version</th></tr></thead><tbody>${fbRows || '<tr><td colspan="5" class="muted">Nothing yet.</td></tr>'}</tbody></table></div></div>
+      <div class="card"><h2>Questions that failed to load</h2><div class="wrap"><table><thead><tr><th>Day</th><th>Skill</th><th class="n">Level</th><th>Device</th><th>Version</th><th>Message</th></tr></thead><tbody>${problems || '<tr><td colspan="6" class="muted">None. 🎉</td></tr>'}</tbody></table></div></div>
+      <div class="card"><h2>Leaderboard</h2><p class="muted">Remove an entry if a name or score looks wrong. The child reappears after their next round unless a grown-up hides them.</p><div class="wrap"><table><thead><tr><th>Player</th><th class="n">Grade</th><th class="n">Points</th><th class="n">This week</th><th class="n">Minutes</th><th>Updated</th><th></th></tr></thead><tbody>${lbRows || '<tr><td colspan="7" class="muted">Nobody yet.</td></tr>'}</tbody></table></div></div>
+      <div class="card"><h2>Reminder times</h2><p>${Object.keys(hours).sort((a, b) => a - b).map(x => `${pad(x)}:00 × ${hours[x]}`).join(' · ') || '<span class="muted">No devices have reminders on.</span>'}</p></div>
+      <div class="row"><span class="muted">${events.length} events · data as of ${new Date().toLocaleString()}</span><button class="ghost" id="out">Sign out</button></div>`);
+    document.getElementById('out').onclick = () => fb.auth().signOut();
+    app.querySelectorAll('[data-del]').forEach(b => { b.onclick = async () => {
+      if (!confirm('Remove this child from the leaderboard?')) return;
+      const docs = board.filter(d => d.pid === b.dataset.del);
+      for (const d of docs) await db.collection('leaderboard').doc(d._id).delete();
+      open(fb.auth().currentUser);
+    }; });
+  }
+})();
+</script>
+</body>
+</html>
