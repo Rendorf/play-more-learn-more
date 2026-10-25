@@ -26522,7 +26522,7 @@ const Sfx = (() => {
   // ---------- State & storage ----------
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const dayDiff = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
-  const DEFAULT = () => ({ v: 1, pin: null, settings: { sfx: true, music: true, timer: false, currency: '₼', unlockAll: false }, profiles: [], current: null, updatedAt: 0 });
+  const DEFAULT = () => ({ v: 1, pin: null, settings: { sfx: true, music: true, timer: false, currency: '₼' }, profiles: [], current: null, updatedAt: 0 });
   const newProfile = (name, avatar, grade, theme) => ({
     id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name, avatar, grade, theme, hat: null,
     coins: 0, brain: 0, owned: [], trophies: {}, streak: { days: 0, last: null }, quests: { date: null, list: [] },
@@ -26586,13 +26586,6 @@ const Sfx = (() => {
   const ctx = () => ({ currency: state.settings.currency || '₼' });
   const unitsOf = g => PMLM.unitsOf(g);
   const skillsOf = g => PMLM.skillsOf(g);
-  function isUnlocked(p, sk) {
-    if (state.settings.unlockAll) return true;
-    const list = PMLM.skillsInUnit(sk.unit), i = list.indexOf(sk);
-    if (i <= 0) return true;
-    const gs = gradeState(p, sk.grade);
-    return skillState(gs, list[i - 1].id).stars >= 1;
-  }
   const bossUnlocked = (p, unitId) => PMLM.skillsInUnit(unitId).every(s => skillState(gradeState(p, s.grade), s.id).stars >= 1);
   function gradeProgress(p, g) {
     const list = skillsOf(g), gs = gradeState(p, g);
@@ -26603,8 +26596,8 @@ const Sfx = (() => {
   function nextSkill(p, g) {
     const gs = gradeState(p, g), list = skillsOf(g);
     return list.find(s => needsRefresh(skillState(gs, s.id)))
-      || list.find(s => isUnlocked(p, s) && !skillState(gs, s.id).mastered && skillState(gs, s.id).stars < 1)
-      || list.find(s => isUnlocked(p, s) && !skillState(gs, s.id).mastered)
+      || list.find(s => !skillState(gs, s.id).mastered && skillState(gs, s.id).stars < 1)
+      || list.find(s => !skillState(gs, s.id).mastered)
       || list[0];
   }
   function counts(p) {
@@ -26853,9 +26846,9 @@ const Sfx = (() => {
       html += `<section class="unit"><div class="unit-head"><div class="world-node" style="background:${t.node(hue)};${t.ring && ui % 2 === 0 ? '--ring:block' : ''}">${h(u.icon)}</div>
         <div class="stack" style="gap:6px;min-width:0"><span class="eyebrow">Unit ${ui + 1} · ${done}/${skills.length} mastered</span><h3>${h(u.name)}</h3><span class="bar"><i style="width:${skills.length ? done / skills.length * 100 : 0}%"></i></span></div></div><div class="path">`;
       skills.forEach((s, i) => {
-        const ss = skillState(gs, s.id), un = isUnlocked(p, s), x = Math.round(Math.sin(i * 1.25 + ui) * 44);
-        const cls = ['node', un ? '' : 'locked', ss.mastered ? 's3' : ss.stars ? 's' + ss.stars : '', next && next.id === s.id ? 'current' : ''].join(' ');
-        html += `<button class="${cls}" style="--x:${x}px" data-act="skill" data-id="${s.id}" aria-label="${h(s.title)}">${un ? h(s.icon) : '🔒'}
+        const ss = skillState(gs, s.id), x = Math.round(Math.sin(i * 1.25 + ui) * 44);
+        const cls = ['node', ss.mastered ? 's3' : ss.stars ? 's' + ss.stars : '', next && next.id === s.id ? 'current' : ''].join(' ');
+        html += `<button class="${cls}" style="--x:${x}px" data-act="skill" data-id="${s.id}" aria-label="${h(s.title)}">${h(s.icon)}
           ${needsRefresh(ss) ? '<span class="badge">↻</span>' : ''}<span class="stars">${'⭐'.repeat(ss.mastered ? 3 : ss.stars)}</span>
           <span class="nlabel ${x >= 0 ? 'l' : 'r'}">${h(s.title)}</span></button>`;
       });
@@ -26879,7 +26872,7 @@ const Sfx = (() => {
   function closeSheet() { document.querySelectorAll('.overlay').forEach(o => o.remove()); }
 
   function skillSheet(id) {
-    const p = P(), sk = PMLM.byId[id], gs = gradeState(p, sk.grade), ss = skillState(gs, id), un = isUnlocked(p, sk);
+    const p = P(), sk = PMLM.byId[id], gs = gradeState(p, sk.grade), ss = skillState(gs, id);
     const hist = ss.hist.slice(-10), firsts = hist.filter(Boolean).length, days = ss.days.length;
     openSheet(`<div class="stack">
       <div class="row between"><span style="font-size:3rem;line-height:1">${h(sk.icon)}</span><button class="iconbtn x" data-act="close" aria-label="Close">✕</button></div>
@@ -26888,9 +26881,8 @@ const Sfx = (() => {
       <div class="stack" style="gap:6px"><span class="eyebrow">Mastery</span>
         <div class="pdots">${Array.from({ length: 10 }, (_, i) => `<i class="${hist[i] === 1 ? 'ok' : hist[i] === 0 ? 'bad' : ''}"></i>`).join('')}</div>
         <span class="muted" style="font-size:.9rem">${ss.mastered ? 'You mastered this! Keep it fresh with a quick round now and then.' : `Get 8 of your last 10 right first time, on 2 different days. Now: ${firsts}/10 · day ${Math.min(days, 2)} of 2.`}</span></div>
-      ${un ? '' : '<p class="hintbox"><span class="hi">🔒</span><span>Earn a star on the skill before this one to unlock practice. You can still read the lesson.</span></p>'}
       <div class="grid2"><button class="btn ${ss.lesson ? '' : 'primary'}" data-act="learn" data-id="${id}">📖 Learn</button>
-      <button class="btn ${ss.lesson ? 'primary' : ''}" data-act="practise" data-id="${id}" ${un ? '' : 'disabled'}>▶ Practise</button></div>
+      <button class="btn ${ss.lesson ? 'primary' : ''}" data-act="practise" data-id="${id}">▶ Practise</button></div>
       ${ss.stars >= 2 ? `<button class="btn go block" data-act="extra" data-id="${id}">⚡ Extra challenge (60 seconds)</button>` : ''}
     </div>`);
   }
@@ -26916,7 +26908,7 @@ const Sfx = (() => {
     view.innerHTML = `<div class="stack center" style="padding-block:40px;align-items:center">
       <div style="font-size:4rem">${theme().mascot}</div><h2>Lesson complete!</h2>
       <p class="muted">You learned <b>${h(sk.title)}</b>. Now practise to earn stars.</p>
-      <button class="btn primary block pulse" data-act="practise" data-id="${sk.id}" ${isUnlocked(P(), sk) ? '' : 'disabled'}>▶ Start practice</button>
+      <button class="btn primary block pulse" data-act="practise" data-id="${sk.id}">▶ Start practice</button>
       <button class="btn ghost block" data-act="home">Back to the map</button></div>`;
   }
 
@@ -27389,9 +27381,7 @@ const Sfx = (() => {
       <div class="card stack" style="gap:4px"><h3>⚙️ Settings</h3>
         <label class="toggle">Sound effects <input type="checkbox" data-change="set" data-k="sfx" ${state.settings.sfx ? 'checked' : ''}></label>
         <label class="toggle">Music during rounds <input type="checkbox" data-change="set" data-k="music" ${state.settings.music ? 'checked' : ''}></label>
-        <label class="toggle"><span>Speed bonus <span class="muted" style="font-weight:400">(a timer bar; fast answers earn extra brain power, nothing is lost)</span></span><input type="checkbox" data-change="set" data-k="timer" ${state.settings.timer ? 'checked' : ''}></label>
-        <label class="toggle"><span>Unlock all skills <span class="muted" style="font-weight:400">(practise any topic the school is on now)</span></span><input type="checkbox" data-change="set" data-k="unlockAll" ${state.settings.unlockAll ? 'checked' : ''}></label>
-        <div class="field" style="margin-top:8px"><label for="cur">Money symbol</label><select id="cur" data-change="currency">${['₼', '$', '£', '€', '₽', '₺', '₹'].map(c => sOpt(c, state.settings.currency, c.trim())).join('')}</select></div></div>
+        <label class="toggle"><span>Speed bonus <span class="muted" style="font-weight:400">(a timer bar; fast answers earn extra brain power, nothing is lost)</span></span><input type="checkbox" data-change="set" data-k="timer" ${state.settings.timer ? 'checked' : ''}></label>        <div class="field" style="margin-top:8px"><label for="cur">Money symbol</label><select id="cur" data-change="currency">${['₼', '$', '£', '€', '₽', '₺', '₹'].map(c => sOpt(c, state.settings.currency, c.trim())).join('')}</select></div></div>
 
       <div class="card stack"><h3>💾 Backup</h3>
         <p class="muted" style="font-size:.9rem">Progress is saved on this device${IN_ARTIFACT ? ' and in your claude.ai account' : ''}. To move it to another device, copy the backup code and paste it there.</p>
