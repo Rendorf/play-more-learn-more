@@ -125,3 +125,14 @@ export function watchErrors(page) {
   page.on('console', m => { if (m.type() === 'error' && !/favicon|ERR_CONNECTION_REFUSED|Failed to load resource|net::ERR/.test(m.text())) errors.push(m.text()); });
   return errors;
 }
+
+// The leaderboard fields survive: present, the same week, and no number smaller than before
+// (a version that predates them leaves them as they are; a newer one adds to them)
+export function keptOrGrew(expect, before, after, label) {
+  if (!before) return;
+  expect(after, label).toBeTruthy();
+  for (const [k, v] of Object.entries(before)) {
+    if (typeof v === 'number') expect(after[k], `${label}.${k}`).toBeGreaterThanOrEqual(v);
+    else expect(after[k], `${label}.${k}`).toEqual(v);
+  }
+}

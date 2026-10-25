@@ -39,7 +39,7 @@ The game is the single `index.html` file and plays the same without internet. Th
 | `tools/admin/` | Owner tools: the reminder sender, database backup, reminder key setup |
 | `tests/` | Everything that must pass before a change goes to `main` (`tests/run-all.sh`) |
 
-After changing a grade file, check it, rebuild, and push. GitHub Pages updates the live site within a minute or two.
+After changing a grade file, check it, rebuild, and send it as a pull request. `main` is protected, so a change reaches the live site only through a pull request whose tests pass (see [Releasing safely](#releasing-safely)). GitHub Pages updates the live site a minute or two after the merge.
 
 ```bash
 node tools/check-content.mjs src/grade6.js
@@ -50,7 +50,7 @@ python3 build.py
 ```
 
 ```bash
-git add -A && git commit -m "Describe the change" && git push
+git switch -c my-change && git add -A && git commit -m "Describe the change" && git push -u origin my-change && gh pr create --fill && gh pr merge --auto --merge
 ```
 
 Opening `index.html#selftest` in a browser runs the same checks across all grades inside the game, including drawing every picture.

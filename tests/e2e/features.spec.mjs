@@ -11,7 +11,8 @@ test('grown-up quick start: PIN first, then straight to the wishes', async ({ pa
   await fresh(page);
   await newPlayer(page, { name: 'Ana', grade: 3, closeQuickStart: false });
   await expect(page.locator('.sheet')).toContainText('Grown-ups: 1-minute setup', { timeout: 5000 });
-  await expect(page.locator('.sheet ol.steps li')).toHaveCount(3);   // PIN, wish, Home Screen (no reminder key in this copy)
+  const reminders = await page.evaluate(() => Online.push.configured);
+  await expect(page.locator('.sheet ol.steps li')).toHaveCount(reminders ? 4 : 3);   // PIN, wish, Home Screen (+ reminder once a key is set)
   await act(page, 'qsgo');
   await expect(page.getByText('Create a 4-digit parent PIN')).toBeVisible();
   await typePin(page); await typePin(page);
