@@ -278,9 +278,10 @@ const Sfx = (() => {
     gn.gain.exponentialRampToValueAtTime(v, t0 + (o.attack || 0.004));
     gn.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     src.connect(f); f.connect(gn); gn.connect(o.bus || sfxBus);
-    src.start(t0); src.stop(t0 + dur + 0.05);
+    src.start(t0, Math.random() * 0.9); src.stop(t0 + dur + 0.05);   // random start: no two noises sound the same
   }
   const ok = () => sfxOn && ensure();
+  let keyStyle = 'clicky';
 
   // Music: I–V–vi–IV loop, tempo and layers rise with the combo tier
   const CHORDS = [[60, 64, 67], [55, 59, 62], [57, 60, 64], [53, 57, 60]];
@@ -310,7 +311,34 @@ const Sfx = (() => {
     },
     stopMusic() { playing = false; clearInterval(musicTimer); musicTimer = 0; },
     setTier(t) { tier = t; },
-    click() { if (!ok()) return; tone(1200, ac.currentTime, 0.04, { type: 'square', vol: 0.05 }); },
+    setKeyStyle(s) { keyStyle = s || 'clicky'; },
+    // A mechanical keyboard switch. style 'clicky' (blue switch: crisp click, metal tick and a short body "tock")
+    // or 'thocky' (deep muted thock). kind 'big' | 'key' | 'small' makes big buttons a little deeper; phase 'down'
+    // is the press, 'up' the quieter release tick. Small random pitch and level changes keep it from sounding robotic.
+    key(kind = 'key', phase = 'down') {
+      if (keyStyle === 'off' || !ok()) return;
+      const t = ac.currentTime + 0.002, v = 0.85 + Math.random() * 0.3, p = 0.94 + Math.random() * 0.12;
+      const deep = kind === 'big' ? 0.82 : kind === 'small' ? 1.12 : 1;
+      const fast = { attack: 0.0008 };
+      if (phase === 'up') {
+        if (keyStyle === 'clicky') {
+          noise(t, 0.01, { ...fast, filter: 'bandpass', freq: 5000 * p, q: 3, vol: 0.05 * v });
+          tone(3400 * p, t, 0.01, { ...fast, type: 'triangle', vol: 0.02 * v });
+        } else noise(t, 0.015, { ...fast, filter: 'lowpass', freq: 1600 * p, vol: 0.05 * v });
+        return;
+      }
+      if (keyStyle === 'clicky') {
+        noise(t, 0.016, { ...fast, filter: 'bandpass', freq: 3200 * p / deep, q: 2.2, vol: 0.16 * v });          // the click
+        noise(t + 0.006, 0.012, { ...fast, filter: 'bandpass', freq: 2200 * p / deep, q: 2, vol: 0.08 * v });   // click jacket
+        tone(4600 * p, t, 0.01, { ...fast, type: 'triangle', vol: 0.04 * v });                                    // metal tick
+        tone(260 * p * deep, t + 0.003, 0.045, { attack: 0.001, type: 'sine', vol: 0.2 * v, slide: 140 * p * deep }); // body
+      } else {
+        noise(t, 0.03, { ...fast, filter: 'lowpass', freq: 1000 * p * deep, q: 0.8, vol: 0.22 * v });
+        tone(160 * p * deep, t, 0.07, { attack: 0.001, type: 'sine', vol: 0.32 * v, slide: 90 * p * deep });
+      }
+      try { if (navigator.vibrate) navigator.vibrate(6); } catch (e) { /* no vibration here */ }
+    },
+    click() { this.key('small', 'down'); },
     correct(combo) {
       if (!ok()) return;
       const t = ac.currentTime, tr = comboTier(combo), base = 72 + PENTA[combo % 5] + 12 * (Math.floor(combo / 5) % 2);

@@ -67,7 +67,7 @@
   // ---------- State & storage ----------
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const dayDiff = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
-  const DEFAULT = () => ({ v: 1, pin: null, settings: { sfx: true, music: true, timer: false, currency: '₼' }, profiles: [], current: null, updatedAt: 0 });
+  const DEFAULT = () => ({ v: 1, pin: null, settings: { sfx: true, music: true, timer: false, currency: '₼', keySound: 'clicky' }, profiles: [], current: null, updatedAt: 0 });
   const newProfile = (name, avatar, grade, theme) => ({
     id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name, avatar, grade, theme, hat: null,
     coins: 0, brain: 0, owned: [], trophies: {}, streak: { days: 0, last: null }, quests: { date: null, list: [] },
@@ -760,7 +760,7 @@
     const p = P(), id = (p && p.theme) || 'space';
     document.documentElement.dataset.world = id;
     World.setTheme(id); FX.setTheme(id);
-    Sfx.setSfx(state.settings.sfx); Sfx.setMusic(state.settings.music);
+    Sfx.setSfx(state.settings.sfx); Sfx.setMusic(state.settings.music); Sfx.setKeyStyle(state.settings.keySound || 'clicky');
   }
 
   function render() {
@@ -1112,7 +1112,6 @@
   function press(k) {
     if (!R || R.done) return;
     const f = R.inp.focus, list = fields();
-    Sfx.click();
     if (k === 'ok') return submit();
     if (k === 'next') { R.inp.focus = list[(list.indexOf(f) + 1) % list.length]; return drawAnswer(); }
     let v = R.inp[f];
@@ -1491,7 +1490,9 @@
       <div class="card stack" style="gap:4px"><h3>⚙️ Settings</h3>
         <label class="toggle">Sound effects <input type="checkbox" data-change="set" data-k="sfx" ${state.settings.sfx ? 'checked' : ''}></label>
         <label class="toggle">Music during rounds <input type="checkbox" data-change="set" data-k="music" ${state.settings.music ? 'checked' : ''}></label>
-        <label class="toggle"><span>Speed bonus <span class="muted" style="font-weight:400">(a timer bar; fast answers earn extra brain power, nothing is lost)</span></span><input type="checkbox" data-change="set" data-k="timer" ${state.settings.timer ? 'checked' : ''}></label>        <div class="field" style="margin-top:8px"><label for="cur">Money symbol</label><select id="cur" data-change="currency">${['₼', '$', '£', '€', '₽', '₺', '₹'].map(c => sOpt(c, state.settings.currency, c.trim())).join('')}</select></div></div>
+        <label class="toggle"><span>Speed bonus <span class="muted" style="font-weight:400">(a timer bar; fast answers earn extra brain power, nothing is lost)</span></span><input type="checkbox" data-change="set" data-k="timer" ${state.settings.timer ? 'checked' : ''}></label>
+        <div class="field" style="margin-top:8px"><label for="keysound">Button sound <span class="muted" style="font-weight:400">(on this device)</span></label><select id="keysound" data-change="keysound">${[['clicky', 'Clicky: crisp mechanical keyboard'], ['thocky', 'Thocky: deep, soft keyboard'], ['off', 'Off']].map(([v, l]) => sOpt(v, state.settings.keySound || 'clicky', l)).join('')}</select></div>
+        <div class="field" style="margin-top:8px"><label for="cur">Money symbol</label><select id="cur" data-change="currency">${['₼', '$', '£', '€', '₽', '₺', '₹'].map(c => sOpt(c, state.settings.currency, c.trim())).join('')}</select></div></div>
 
       ${Sync.isParent ? '' : Sync.card()}
 
@@ -1573,7 +1574,7 @@
     grade: d => { P().grade = +d.id; save(); render(); },
     skill: d => skillSheet(d.id),
     learn: d => { closeSheet(); S.screen = 'lesson'; S.skill = d.id; S.card = 0; render(); },
-    lnext: () => { S.card++; Sfx.click(); render(); },
+    lnext: () => { S.card++; render(); },
     lprev: () => { S.card = Math.max(0, S.card - 1); render(); },
     tryit: () => startRound('try', { skill: S.skill }),
     practise: d => { closeSheet(); startRound('practice', { skill: d.id }); },
@@ -1798,6 +1799,7 @@
     pgrade: (d, el) => { const x = state.profiles.find(q => q.id === d.id); x.grade = +el.value; save(); S.keepScroll = true; render(); S.keepScroll = false; },
     set: (d, el) => { state.settings[d.k] = el.checked; save(); applyTheme(); },
     currency: (d, el) => { state.settings.currency = el.value; save(); },
+    keysound: (d, el) => { state.settings.keySound = el.value; save(); applyTheme(); Sfx.key('key', 'down'); setTimeout(() => Sfx.key('key', 'up'), 90); },
     importfile: (d, el) => { const f = el.files && el.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => importCode(String(r.result)); r.readAsText(f); },
   };
 
@@ -1816,6 +1818,7 @@
       if (S.tab === 'parent' && !S.parentOk && S.screen === 'home' && /^\d$/.test(e.key) && !(e.target.closest && e.target.closest('input,textarea,select'))) pinKey(e.key);
       return;
     }
+    if (!e.repeat && (/^[\d.,\-/]$/.test(e.key) || /^(Enter|Backspace|Tab|Arrow)/.test(e.key) || e.key === ' ')) Sfx.key(e.key === 'Enter' || e.key === ' ' ? 'big' : 'key');
     if (R.done) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if ($('[data-act="next"]')) nextQuestion(); else if (R.autoNext) { clearTimeout(R.autoNext); nextQuestion(); } } return; }
     if (R.q.kind === 'choice') { const i = +e.key - 1; if (i >= 0 && i < R.choices.length && !R.wrongChoices.includes(R.choices[i])) choose(i); return; }
     if (/^\d$/.test(e.key)) press(e.key);
@@ -1826,6 +1829,24 @@
     else if (e.key === 'Tab' || e.key === '/' || e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'ArrowRight' || e.key === 'ArrowLeft') { if (R.q.kind !== 'number') { e.preventDefault(); press('next'); } }
   });
   document.addEventListener('pointerdown', () => Sfx.unlock(), { once: true });
+
+  // Mechanical key feel: the switch sound and the pressed-in look start the moment a finger or mouse goes
+  // down on any button, and a lighter release tick plays when it comes up
+  let pressedEl = null;
+  document.addEventListener('pointerdown', e => {
+    const b = e.target.closest && e.target.closest('button, [data-act]');
+    if (!b || b.disabled || e.button > 0) return;
+    pressedEl = b; b.classList.add('pressed');
+    const r = b.getBoundingClientRect(), area = r.width * r.height;
+    Sfx.key(area > 9000 ? 'big' : area < 2600 ? 'small' : 'key', 'down');
+  });
+  const releaseKey = () => {
+    if (!pressedEl) return;
+    pressedEl.classList.remove('pressed'); pressedEl = null;
+    Sfx.key('key', 'up');
+  };
+  document.addEventListener('pointerup', releaseKey);
+  document.addEventListener('pointercancel', releaseKey);
 
   // ---------- Self-test (#selftest) ----------
   function selfTest() {
