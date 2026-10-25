@@ -360,6 +360,45 @@
       || list.find(s => !skillState(gs, s.id).mastered)
       || list[0];
   }
+  // Most recent time this player answered a question (0 if never)
+  const lastActivity = p => Math.max(0, ...Object.values(p.grades || {}).flatMap(g => Object.values(g.skills || {}).map(s => s.last || 0)));
+
+  // Fold player b into player a: the stronger record wins for each skill, and mistakes and bosses are
+  // pooled. sum=true (two separate records of one child) adds coins and totals; sum=false (a newer copy
+  // of the same record, e.g. a backup code from the child's device) keeps the larger of each instead.
+  function combineProfiles(a, b, sum = true) {
+    const add = (x, y) => (sum ? (x || 0) + (y || 0) : Math.max(x || 0, y || 0));
+    a.coins = add(a.coins, b.coins);
+    a.brain = add(a.brain, b.brain);
+    for (const k of ['answered', 'correct', 'first', 'ms', 'rounds', 'fixed', 'perfect']) a.stats[k] = add(a.stats[k], (b.stats || {})[k]);
+    a.stats.bestCombo = Math.max(a.stats.bestCombo || 0, (b.stats || {}).bestCombo || 0);
+    a.owned = [...new Set([...(a.owned || []), ...(b.owned || [])])];
+    for (const [k, t] of Object.entries(b.trophies || {})) if (!a.trophies[k] || t < a.trophies[k]) a.trophies[k] = t;
+    if (((b.streak || {}).days || 0) > ((a.streak || {}).days || 0)) a.streak = Object.assign({}, b.streak);
+    const score = s => (s.mastered ? 1e9 : 0) + (s.stars || 0) * 1e6 + (s.tries || 0);
+    const rank = { locked: 0, unlocked: 1, granted: 2 };
+    for (const [g, gb] of Object.entries(b.grades || {})) {
+      const ga = gradeState(a, +g);
+      for (const [id, sb] of Object.entries(gb.skills || {})) {
+        const sa = ga.skills[id];
+        if (!sa || score(sb) > score(sa)) ga.skills[id] = Object.assign({}, sb, { lesson: sb.lesson || !!(sa && sa.lesson), extra: Math.max(sb.extra || 0, (sa && sa.extra) || 0) });
+        else { sa.lesson = sa.lesson || sb.lesson; sa.extra = Math.max(sa.extra || 0, sb.extra || 0); }
+      }
+      const seen = new Set(ga.review.map(r => r.skill + '|' + r.q.q));
+      for (const r of gb.review || []) if (!seen.has(r.skill + '|' + r.q.q)) ga.review.push(r);
+      ga.review = ga.review.slice(-30);
+      for (const [u, won] of Object.entries(gb.bosses || {})) if (won) ga.bosses[u] = true;
+      ga.placed = ga.placed || !!gb.placed;
+      (gb.wishes || []).forEach((wb, i) => {
+        const wa = ga.wishes[i];
+        if (!wa) return;
+        if (!wa.text.trim() && (wb.text || '').trim()) { wa.text = wb.text; wa.emoji = wb.emoji; }
+        if ((rank[wb.status] || 0) > (rank[wa.status] || 0)) Object.assign(wa, { status: wb.status, unlockedAt: wb.unlockedAt, grantedAt: wb.grantedAt });
+      });
+    }
+    return a;
+  }
+
   function counts(p) {
     const c = { lessons: 0, stars: 0, mastered: 0, bosses: 0, wishes: 0, gradesDone: 0 };
     for (const g of Object.keys(p.grades)) {
@@ -1113,8 +1152,30 @@
     const weak = rows.filter(r => r.ss.tries >= 5).sort((a, b) => a.acc - b.acc).slice(0, 3);
     const mins = Math.round(who.stats.ms / 60000);
     const sOpt = (v, cur, lbl) => `<option value="${v}" ${String(v) === String(cur) ? 'selected' : ''}>${h(lbl)}</option>`;
+    const family = state.profiles.map(x => {
+      const pr = gradeProgress(x, x.grade), xgs = gradeState(x, x.grade), last = lastActivity(x);
+      const hard = skillsOf(x.grade).map(s => ({ s, ss: skillState(xgs, s.id) }))
+        .filter(r => r.ss.tries >= 5).sort((a, b) => a.ss.right / a.ss.tries - b.ss.right / b.ss.tries)[0];
+      return `<button class="famcard ${x.id === sel.player ? 'on' : ''}" data-act="famsel" data-id="${x.id}">
+        <span class="fav">${h(x.avatar)}</span>
+        <span class="stack" style="gap:4px;min-width:0"><b>${h(x.name)}</b>
+          <span class="muted">Grade ${x.grade} · ${pr.pct}% mastered (${pr.mastered}/${pr.total})</span>
+          <span class="bar gold"><i style="width:${pr.pct}%"></i></span>
+          <span class="muted">${last ? 'Last played ' + new Date(last).toLocaleDateString() : 'Not played yet'}${hard ? ` · needs help: ${h(hard.s.title)}` : ''}</span></span></button>`;
+    }).join('');
+    // Pre-select a likely duplicate (same name), keeping the one that has played most recently
+    const label = x => { const t = lastActivity(x); return `${x.avatar} ${x.name} · Grade ${x.grade} · ${t ? 'played ' + new Date(t).toLocaleDateString() : 'not played yet'}`; };
+    const byName = {}; state.profiles.forEach(x => (byName[x.name.trim().toLowerCase()] = byName[x.name.trim().toLowerCase()] || []).push(x));
+    const pair = Object.values(byName).find(l => l.length > 1);
+    const ranked = pair ? pair.slice().sort((a, b) => lastActivity(b) - lastActivity(a)) : state.profiles;
+    const cbKeep = ranked[0], cbFrom = ranked[1];
     view.innerHTML = `<div class="stack">
       <div class="row between"><h2>Grown-ups</h2><button class="btn small ghost" data-act="lock">🔒 Lock</button></div>
+
+      <div class="card stack"><h3>👨‍👩‍👧 Family</h3>
+        <div class="famgrid">${family}</div>
+        <p class="muted" style="font-size:.88rem">Tap a child to see their wishes and full report below. A child who plays on another device: on that device open <b>Parents → Backup → Copy backup code</b>, send it to yourself, paste it under <b>Backup</b> here and choose <b>Add these players</b>. Do it again any time to refresh their progress.${Sync.enabled ? ' Or sign in to Online saving on both devices to keep everyone in sync automatically.' : ''}</p></div>
+
       <div class="grid2"><div class="field"><label for="ps-player">Player</label><select id="ps-player" data-change="psel">${state.profiles.map(x => sOpt(x.id, sel.player, x.name)).join('')}</select></div>
         <div class="field"><label for="ps-grade">Grade</label><select id="ps-grade" data-change="psel">${GRADES.map(g => sOpt(g, sel.grade, 'Grade ' + g)).join('')}</select></div></div>
 
@@ -1140,7 +1201,11 @@
         ${state.profiles.map(x => `<div class="row between"><span style="font-weight:700">${h(x.avatar)} ${h(x.name)} · Grade ${x.grade}</span>
           <span class="row" style="gap:6px"><select aria-label="Grade for ${h(x.name)}" data-change="pgrade" data-id="${x.id}" style="min-height:40px;border-radius:12px;border:0;background:var(--panel2);padding:0 8px">${GRADES.map(g => sOpt(g, x.grade, 'Grade ' + g)).join('')}</select>
           <button class="btn small ghost" data-act="delplayer" data-id="${x.id}">Delete</button></span></div>`).join('')}
-        <button class="btn small" data-act="newplayer">+ Add a player</button></div>
+        <button class="btn small" data-act="newplayer">+ Add a player</button>
+        ${cbFrom ? `<div class="stack" style="gap:6px;margin-top:8px"><span class="eyebrow">Same child twice?</span>
+          <div class="grid2"><div class="field"><label for="cb-keep">Keep</label><select id="cb-keep">${state.profiles.map(x => sOpt(x.id, cbKeep.id, label(x))).join('')}</select></div>
+          <div class="field"><label for="cb-from">Add progress from</label><select id="cb-from">${state.profiles.map(x => sOpt(x.id, cbFrom.id, label(x))).join('')}</select></div></div>
+          <button class="btn small ghost" data-act="combine">Combine players</button></div>` : ''}</div>
 
       <div class="card stack" style="gap:4px"><h3>⚙️ Settings</h3>
         <label class="toggle">Sound effects <input type="checkbox" data-change="set" data-k="sfx" ${state.settings.sfx ? 'checked' : ''}></label>
@@ -1150,10 +1215,10 @@
       ${Sync.card()}
 
       <div class="card stack"><h3>💾 Backup</h3>
-        <p class="muted" style="font-size:.9rem">Progress is saved on this device${IN_ARTIFACT ? ' and in your claude.ai account' : ''}. To move it to another device, copy the backup code and paste it there.</p>
+        <p class="muted" style="font-size:.9rem">Progress is saved on this device${IN_ARTIFACT ? ' and in your claude.ai account' : ''}. Copy the backup code to keep a copy, or paste a code from another device to add its players here.</p>
         <div class="row"><button class="btn small" data-act="export">Copy backup code</button><button class="btn small ghost" data-act="download">Save backup file</button><label class="btn small ghost" for="importfile">Load file</label><input type="file" id="importfile" accept=".json,application/json,text/plain" hidden data-change="importfile"></div>
-        <div class="field"><label for="backup">Backup code</label><textarea id="backup" placeholder="Paste a backup code here to load it"></textarea></div>
-        <button class="btn small ghost" data-act="import">Load from the code above</button></div>
+        <div class="field"><label for="backup">Backup code</label><textarea id="backup" placeholder="Paste a backup code from another device here"></textarea></div>
+        <button class="btn small" data-act="import">Use the code above</button></div>
 
       <div class="card stack"><h3>🔑 PIN</h3><button class="btn small ghost" data-act="changepin">Change PIN</button>
         <button class="btn small ghost" data-act="resetplayer">Reset ${h(who.name)}'s Grade ${sel.grade} progress</button></div>
@@ -1323,6 +1388,47 @@
       document.body.appendChild(a); a.click(); a.remove();
     },
     import: () => importCode($('#backup').value),
+    famsel: d => { const x = state.profiles.find(q => q.id === d.id); S.pSel = { player: x.id, grade: x.grade }; S.keepScroll = true; render(); S.keepScroll = false; },
+    combine: () => {
+      const keep = state.profiles.find(x => x.id === $('#cb-keep').value), from = state.profiles.find(x => x.id === $('#cb-from').value);
+      if (!keep || !from || keep === from) { toast('Pick two different players to combine.'); return; }
+      const when = x => { const t = lastActivity(x); return t ? 'last played ' + new Date(t).toLocaleDateString() : 'not played yet'; };
+      openSheet(`<div class="stack center"><h2>Combine the two players?</h2>
+        <p><b>Keep:</b> ${h(keep.avatar)} ${h(keep.name)}, Grade ${keep.grade}, ${when(keep)}<br><b>Remove:</b> ${h(from.avatar)} ${h(from.name)}, Grade ${from.grade}, ${when(from)}</p>
+        <p class="muted">The kept player gets the best result for every skill from both, plus their coins, trophies and mistakes to fix. Backup codes from the removed player's device will update the kept player from now on.</p>
+        <button class="btn primary block" data-act="combineok" data-keep="${keep.id}" data-from="${from.id}">Combine</button><button class="btn ghost block" data-act="close">Cancel</button></div>`, true);
+    },
+    combineok: d => {
+      const keep = state.profiles.find(x => x.id === d.keep), from = state.profiles.find(x => x.id === d.from);
+      if (!keep || !from) return closeSheet();
+      combineProfiles(keep, from);
+      // Remember the removed id so later backup codes from that device update the kept player
+      state.aliases = state.aliases || {};
+      for (const [k, v] of Object.entries(state.aliases)) if (v === from.id) state.aliases[k] = keep.id;
+      state.aliases[from.id] = keep.id;
+      state.deleted = Object.assign({}, state.deleted, { [from.id]: Date.now() });
+      state.profiles = state.profiles.filter(x => x.id !== from.id);
+      if (state.current === from.id) state.current = keep.id;
+      S.pSel = { player: keep.id, grade: keep.grade };
+      closeSheet(); checkTrophies(keep); save(); render();
+      toast(`Combined into ${h(keep.name)}`);
+    },
+    importadd: () => {
+      const s = S.pendingImport; if (!s) return;
+      let added = 0, updated = 0;
+      const alias = state.aliases || {};
+      for (const ip of s.profiles) {
+        const target = state.profiles.find(p => p.id === ip.id || p.id === alias[ip.id]);
+        if (target) { combineProfiles(target, ip, false); updated++; continue; }
+        if (state.deleted) delete state.deleted[ip.id];
+        state.profiles.push(ip); added++;
+      }
+      if (!state.pin && s.pin) state.pin = s.pin;
+      if (!state.current && state.profiles[0]) state.current = state.profiles[0].id;
+      S.pendingImport = null; closeSheet(); save(); S.keepScroll = true; render(); S.keepScroll = false;
+      const names = state.profiles.map(p => p.name.trim().toLowerCase()), twice = state.profiles.find((p, i) => names.indexOf(names[i]) !== i);
+      toast(`${added} player(s) added${updated ? `, ${updated} updated` : ''}.` + (twice ? ` There are now two players called ${h(twice.name)}: use "Same child twice?" under Players to combine them.` : ''));
+    },
     importok: () => { const s = S.pendingImport; if (!s) return; state = Object.assign(DEFAULT(), s); S = { screen: 'home', tab: 'play' }; closeSheet(); save(); render(); toast('Backup loaded'); },
     dbg: d => {
       const who = state.profiles.find(x => x.id === S.pSel.player), g = S.pSel.grade, gs = gradeState(who, g), list = skillsOf(g), k = Math.ceil(list.length * +d.v / 100);
@@ -1338,8 +1444,10 @@
       const s = JSON.parse(text);
       if (!s || s.v !== 1 || !Array.isArray(s.profiles)) throw new Error('bad');
       S.pendingImport = s;
-      openSheet(`<div class="stack center"><h2>Load this backup?</h2><p class="muted">It has ${s.profiles.length} player(s): ${s.profiles.map(p => h(p.name)).join(', ')}. Everything on this device will be replaced.</p>
-        <button class="btn primary block" data-act="importok">Load backup</button><button class="btn ghost block" data-act="close">Cancel</button></div>`, true);
+      openSheet(`<div class="stack center"><h2>Use this code?</h2><p class="muted">It has ${s.profiles.length} player(s): ${s.profiles.map(p => `${h(p.avatar)} ${h(p.name)} (Grade ${p.grade})`).join(', ')}.</p>
+        <button class="btn primary block" data-act="importadd">Add these players</button>
+        <p class="muted" style="font-size:.85rem">Players already here stay. If a child is already here, they get any progress from the code that they don't have yet.</p>
+        <button class="btn ghost block" data-act="importok">Replace everything on this device</button><button class="btn ghost block" data-act="close">Cancel</button></div>`, true);
     } catch (e) { toast("That doesn't look like a backup code. Copy the whole code and try again."); }
   }
 
