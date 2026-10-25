@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 SRC = ROOT / "src"
-ORDER = ["util.js", "registry.js", "validate.js",
+ORDER = ["config.js", "util.js", "registry.js", "validate.js",
          *[f"grade{g}.js" for g in range(1, 10)],
          "visuals.js", "fx.js", "engine.js"]
 

@@ -363,6 +363,13 @@ sup, sub { font-size: .65em; }
 </div>
 <canvas id="fx" aria-hidden="true"></canvas>
 <div id="toast" aria-live="polite"></div>
+<script>/* config.js */
+// Firebase project used for online saving (Parents → Online saving).
+// These web settings are public by design; the Firestore rules in README.md protect the data.
+// Leave as null to turn online saving off.
+const PMLM_FIREBASE = null;
+
+</script>
 <script>/* util.js */
 // Shared helpers for question generators (see CONTRACT.md).
 const U = (() => {
@@ -26541,6 +26548,7 @@ const Sfx = (() => {
   }
   let saveTimer = 0;
   function save() {
+    Sync.track();
     state.updatedAt = Date.now();
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
@@ -26576,6 +26584,221 @@ const Sfx = (() => {
         } catch (e) { doc = null; }
       },
       save(s) { if (!doc) return; pending = s; clearTimeout(timer); timer = setTimeout(flush, 2000); },
+    };
+  })();
+
+  // Family sync for the GitHub Pages / offline copy: Google sign-in + Firestore.
+  // Each player is its own document (families/{uid}/players/{id}) so two kids playing at once never
+  // overwrite each other; the PIN, money symbol, player order and deletions live on families/{uid}.
+  // Newer updatedAt wins. Which player is active stays per device.
+  const Sync = (() => {
+    const CFG = typeof PMLM_FIREBASE !== 'undefined' ? PMLM_FIREBASE : null;
+    const enabled = !!CFG && !IN_ARTIFACT;
+    const SDK = 'https://www.gstatic.com/firebasejs/10.14.1/';
+    const FLAG = 'pmlm.sync';
+    let fb = null, db = null, user = null, unsubs = [], status = 'off', loading = null;
+    let known = {}, knownShared = '', dirty = new Set(), dirtyShared = false, timer = 0, writing = false, pendingRemote = {};
+
+    const strip = p => { const { updatedAt, ...rest } = p; return JSON.stringify(rest); };
+    const sharedOf = () => JSON.stringify({ pin: state.pin, currency: state.settings.currency, timer: state.settings.timer, order: state.profiles.map(p => p.id), deleted: state.deleted || {} });
+    const base = () => db.collection('families').doc(user.uid);
+    const LABELS = { off: 'Not signed in', loading: 'Connecting…', synced: 'All changes saved online ✓', saving: 'Saving…', offline: 'Offline. Changes will upload when the internet is back.', error: 'Could not reach online saving. Changes are kept on this device and will retry.' };
+    const ICONS = { synced: '☁️', saving: '⏳', loading: '⏳', offline: '📴', error: '⚠️' };
+
+    function setStatus(s) {
+      status = s;
+      const el = document.getElementById('syncstatus'); if (el) el.textContent = LABELS[s];
+      const chip = document.getElementById('syncchip'); if (chip) chip.textContent = ICONS[s] || '☁️';
+    }
+    const loadScript = src => new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = src; s.onload = res; s.onerror = () => rej(new Error('Could not load ' + src));
+      document.head.appendChild(s);
+    });
+    function ensureSdk() {
+      if (!enabled) return Promise.reject(new Error('off'));
+      if (!loading) loading = (async () => {
+        if (!window.firebase) for (const f of ['app', 'auth', 'firestore']) await loadScript(`${SDK}firebase-${f}-compat.js`);
+        fb = window.firebase;
+        if (!fb.apps.length) fb.initializeApp(CFG);
+        db = fb.firestore();
+        fb.auth().onAuthStateChanged(onUser);
+        fb.auth().getRedirectResult().catch(() => {});
+        return fb;
+      })().catch(e => { loading = null; throw e; });
+      return loading;
+    }
+
+    function prime() {
+      known = {};
+      for (const p of state.profiles) known[p.id] = strip(p);
+      knownShared = sharedOf();
+    }
+    // Called from save(): stamp whatever changed so the newest copy wins on every device
+    function track() {
+      if (!enabled) return;
+      const now = Date.now();
+      for (const p of state.profiles) {
+        const j = strip(p);
+        if (known[p.id] !== j) { known[p.id] = j; p.updatedAt = now; dirty.add(p.id); }
+      }
+      const sj = sharedOf();
+      if (sj !== knownShared) { knownShared = sj; state.sharedAt = now; dirtyShared = true; }
+      if (user && (dirty.size || dirtyShared)) { clearTimeout(timer); timer = setTimeout(flush, 1500); }
+    }
+    async function flush() {
+      if (!user || writing) return;
+      writing = true; setStatus('saving');
+      const ids = [...dirty], shared = dirtyShared;
+      dirty.clear(); dirtyShared = false;
+      try {
+        for (const id of ids) {
+          const p = state.profiles.find(x => x.id === id);
+          if (p) await base().collection('players').doc(id).set({ data: JSON.stringify(p), updatedAt: p.updatedAt || Date.now() });
+        }
+        if (shared) {
+          await base().set({ shared: knownShared, updatedAt: state.sharedAt || Date.now() });
+          for (const id of Object.keys(state.deleted || {})) await base().collection('players').doc(id).delete();
+        }
+        setStatus(navigator.onLine === false ? 'offline' : 'synced');
+      } catch (e) {
+        ids.forEach(id => dirty.add(id)); if (shared) dirtyShared = true;
+        setStatus(navigator.onLine === false ? 'offline' : 'error');
+        clearTimeout(timer); timer = setTimeout(flush, 15000);
+      }
+      writing = false;
+      if (user && (dirty.size || dirtyShared)) { clearTimeout(timer); timer = setTimeout(flush, 1500); }
+    }
+
+    function applyProfile(p) {
+      if (!p || !p.id || (state.deleted || {})[p.id]) return false;
+      const i = state.profiles.findIndex(x => x.id === p.id);
+      if (i >= 0 && (state.profiles[i].updatedAt || 0) >= (p.updatedAt || 0)) return false;
+      if (i >= 0 && S.screen === 'round' && state.current === p.id) { pendingRemote[p.id] = p; return false; }
+      if (i >= 0) state.profiles[i] = p; else state.profiles.push(p);
+      known[p.id] = strip(p);
+      return true;
+    }
+    // joining = this device is signing in to an existing family: the family's PIN and settings win
+    function applyShared(d, joining) {
+      let sh;
+      try { sh = JSON.parse(d.shared); } catch (e) { return false; }
+      const deleted = Object.assign({}, state.deleted, sh.deleted);
+      const newDeletes = Object.keys(deleted).some(id => state.profiles.some(p => p.id === id));
+      const newer = (d.updatedAt || 0) > (state.sharedAt || 0);
+      if (!newer && !joining && !newDeletes) return false;
+      if (newer || joining) {
+        state.pin = sh.pin || (joining ? state.pin : null);
+        if (sh.currency) state.settings.currency = sh.currency;
+        state.settings.timer = !!sh.timer;
+        const order = sh.order || [], ix = id => { const k = order.indexOf(id); return k < 0 ? 1e9 : k; };
+        state.profiles.sort((a, b) => ix(a.id) - ix(b.id));
+        if (newer) state.sharedAt = d.updatedAt;
+      }
+      state.deleted = deleted;
+      state.profiles = state.profiles.filter(p => !deleted[p.id]);
+      if (!state.profiles.some(p => p.id === state.current)) state.current = state.profiles[0] ? state.profiles[0].id : null;
+      knownShared = sharedOf();
+      return true;
+    }
+    function afterRemote() {
+      save();
+      const typing = document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+      if (S.screen !== 'round' && S.screen !== 'lesson' && S.screen !== 'new' && !typing && !document.querySelector('.overlay, .celebrate')) {
+        S.keepScroll = true; render(); S.keepScroll = false;
+      }
+    }
+
+    async function onUser(u) {
+      unsubs.forEach(f => f()); unsubs = [];
+      user = u;
+      if (!u) { try { localStorage.removeItem(FLAG); } catch (e) { /* storage blocked */ } setStatus('off'); return afterRemote(); }
+      try { localStorage.setItem(FLAG, '1'); } catch (e) { /* storage blocked */ }
+      setStatus('loading');
+      try {
+        const [fam, players] = await Promise.all([base().get(), base().collection('players').get()]);
+        const remoteAt = {};
+        players.forEach(doc => { const d = doc.data(); remoteAt[doc.id] = d.updatedAt || 0; try { applyProfile(JSON.parse(d.data)); } catch (e) { /* skip bad doc */ } });
+        if (fam.exists) applyShared(fam.data(), true);
+        for (const p of state.profiles) if (!(p.id in remoteAt) || (p.updatedAt || 0) > remoteAt[p.id]) dirty.add(p.id);
+        knownShared = sharedOf();
+        dirtyShared = !fam.exists || fam.data().shared !== knownShared;
+        if (dirtyShared) state.sharedAt = Date.now();
+        afterRemote();
+        unsubs.push(base().collection('players').onSnapshot(snap => {
+          let changed = false;
+          snap.docChanges().forEach(ch => {
+            if (ch.type === 'removed' || ch.doc.metadata.hasPendingWrites) return;
+            try { changed = applyProfile(JSON.parse(ch.doc.data().data)) || changed; } catch (e) { /* skip bad doc */ }
+          });
+          if (changed) afterRemote();
+        }, () => setStatus('error')));
+        unsubs.push(base().onSnapshot(doc => {
+          if (!doc.exists || doc.metadata.hasPendingWrites) return;
+          if (applyShared(doc.data())) afterRemote();
+        }, () => setStatus('error')));
+        setStatus('synced');
+        if (dirty.size || dirtyShared) flush();
+      } catch (e) { setStatus('error'); }
+    }
+
+    return {
+      enabled,
+      get user() { return user; },
+      get status() { return status; },
+      prime,
+      track,
+      boot() {
+        if (!enabled) return;
+        prime();
+        let f = null;
+        try { f = localStorage.getItem(FLAG); } catch (e) { /* storage blocked */ }
+        if (f) ensureSdk().catch(() => setStatus('offline'));
+        addEventListener('online', () => { if (user) { setStatus('synced'); flush(); } });
+        addEventListener('offline', () => { if (user) setStatus('offline'); });
+      },
+      // Load the SDK early where a sign-in button is shown, so the tap can open the Google popup directly
+      warm() { if (enabled && !user) ensureSdk().catch(() => {}); },
+      async signIn() {
+        try {
+          if (!fb) { setStatus('loading'); await ensureSdk(); }
+          const provider = new fb.auth.GoogleAuthProvider();
+          provider.setCustomParameters({ prompt: 'select_account' });
+          try { await fb.auth().signInWithPopup(provider); }
+          catch (e) {
+            if (e && e.code === 'auth/popup-blocked') toast('Tap "Sign in with Google" once more to open the Google window.');
+            else if (e && /cancelled|closed-by-user/.test(e.code || '')) { /* user closed the window */ }
+            else if (e && e.code === 'auth/operation-not-supported-in-this-environment') await fb.auth().signInWithRedirect(provider);
+            else throw e;
+            setStatus(user ? 'synced' : 'off');
+          }
+        } catch (e) {
+          setStatus(navigator.onLine === false ? 'offline' : 'off');
+          toast(navigator.onLine === false ? 'You are offline. Connect to the internet to sign in.' : 'Sign-in did not finish. Please try again.');
+        }
+      },
+      async signOut() { if (fb) await fb.auth().signOut(); },
+      // Apply updates that arrived for the active player during a round. The round just played is
+      // stamped first, so if the same player was used on two devices at once this device's round wins.
+      settle() {
+        track();
+        const ps = Object.values(pendingRemote); pendingRemote = {};
+        if (ps.map(applyProfile).some(Boolean)) save();
+      },
+      chip() { return user ? `<span class="chip" id="syncchip" title="Online saving">${ICONS[status] || '☁️'}</span>` : ''; },
+      card() {
+        if (IN_ARTIFACT) return '';
+        if (!enabled) return `<div class="card stack"><h3>☁️ Online saving</h3><p class="muted" style="font-size:.9rem">Online saving isn't set up for this copy of the game, so progress stays on this device.</p></div>`;
+        if (!user) return `<div class="card stack"><h3>☁️ Online saving</h3>
+          <p style="font-size:.95rem">Sign in with Google to keep every player's progress, wishes and PIN the same on all your family's devices. Do it once on each device the kids use.</p>
+          <p class="muted" id="syncstatus" style="font-size:.9rem">${LABELS[status]}</p>
+          <button class="btn primary" data-act="syncin">Sign in with Google</button></div>`;
+        return `<div class="card stack"><h3>☁️ Online saving</h3>
+          <p style="font-size:.95rem">Signed in as <b>${h(user.email || user.displayName || 'your Google account')}</b>. Every device signed in to this account shares the same players.</p>
+          <p class="muted" id="syncstatus" style="font-size:.9rem">${LABELS[status]}</p>
+          <button class="btn small ghost" data-act="syncout">Sign out on this device</button>
+          <p class="muted" style="font-size:.85rem">Signing out keeps a copy of the players on this device but stops syncing.</p></div>`;
+      },
     };
   })();
 
@@ -26758,6 +26981,7 @@ const Sfx = (() => {
       <div class="grow"></div>
       <span class="chip" title="Day streak">🔥 <span class="num">${p.streak.days}</span></span>
       <span class="chip" title="Coins">🪙 <span class="num">${fmt(p.coins)}</span></span>
+      ${Sync.chip()}
       <button class="iconbtn" data-act="mute" aria-label="${muted ? 'Turn sound on' : 'Turn sound off'}">${muted ? '🔇' : '🔊'}</button>`;
     const t = theme(), unlocked = GRADES.reduce((a, g) => a + gradeState(p, g).wishes.filter(w => w.status === 'unlocked').length, 0);
     tabsEl.innerHTML = [['play', t.emoji, 'Play'], ['wishes', '🎁', 'Wishes' + (unlocked ? ` (${unlocked})` : '')], ['me', '🏆', 'Me'], ['parent', '🔒', 'Parents']]
@@ -26772,7 +26996,9 @@ const Sfx = (() => {
         <div class="mascot" style="justify-content:center"><div class="face">🤖</div><div class="bubble">Hi! I'm Blip. Let's make maths fun, one combo at a time!</div></div>
         <p class="center muted">Cambridge maths practice for Grades 1 to 9: short lessons, hints when you need them, and wishes to unlock.</p>
         <button class="btn primary block pulse" data-act="newplayer">Add a player</button>
+        ${Sync.enabled ? '<button class="btn ghost block" data-act="syncin">☁️ We already play on another device</button><p class="center muted" style="font-size:.85rem">A grown-up signs in with Google to load the family\'s players here.</p>' : ''}
       </div>`;
+    Sync.warm();
   }
 
   function renderPlayers() {
@@ -27342,6 +27568,7 @@ const Sfx = (() => {
   // ----- Parent area -----
   function renderParent() {
     if (!S.parentOk) return renderPin();
+    Sync.warm();
     const p = P(), sel = S.pSel || (S.pSel = { player: p.id, grade: p.grade });
     const who = state.profiles.find(x => x.id === sel.player) || p, gs = gradeState(who, sel.grade);
     const prog = gradeProgress(who, sel.grade);
@@ -27382,6 +27609,8 @@ const Sfx = (() => {
         <label class="toggle">Sound effects <input type="checkbox" data-change="set" data-k="sfx" ${state.settings.sfx ? 'checked' : ''}></label>
         <label class="toggle">Music during rounds <input type="checkbox" data-change="set" data-k="music" ${state.settings.music ? 'checked' : ''}></label>
         <label class="toggle"><span>Speed bonus <span class="muted" style="font-weight:400">(a timer bar; fast answers earn extra brain power, nothing is lost)</span></span><input type="checkbox" data-change="set" data-k="timer" ${state.settings.timer ? 'checked' : ''}></label>        <div class="field" style="margin-top:8px"><label for="cur">Money symbol</label><select id="cur" data-change="currency">${['₼', '$', '£', '€', '₽', '₺', '₹'].map(c => sOpt(c, state.settings.currency, c.trim())).join('')}</select></div></div>
+
+      ${Sync.card()}
 
       <div class="card stack"><h3>💾 Backup</h3>
         <p class="muted" style="font-size:.9rem">Progress is saved on this device${IN_ARTIFACT ? ' and in your claude.ai account' : ''}. To move it to another device, copy the backup code and paste it there.</p>
@@ -27439,7 +27668,7 @@ const Sfx = (() => {
   // ---------- Actions ----------
   const ACT = {
     tab: d => { S.tab = d.id; S.screen = 'home'; closeSheet(); render(); },
-    home: () => { closeSheet(); S.screen = 'home'; S.tab = 'play'; R = null; Sfx.stopMusic(); World.setEnergy(0); render(); },
+    home: () => { closeSheet(); S.screen = 'home'; S.tab = 'play'; R = null; Sfx.stopMusic(); World.setEnergy(0); Sync.settle(); render(); },
     close: () => closeSheet(),
     mute: () => { const on = !(state.settings.sfx || state.settings.music); state.settings.sfx = on; state.settings.music = on; save(); render(); },
     players: () => openSheet(`<div class="stack"><div class="row between"><h2>Switch player</h2><button class="iconbtn" data-act="close" aria-label="Close">✕</button></div>
@@ -27525,7 +27754,10 @@ const Sfx = (() => {
       openSheet(`<div class="stack center"><h2>Delete ${h(x.name)}?</h2><p class="muted">This removes the player and all their progress and wishes on this device.</p>
         <button class="btn block" style="background:var(--oops);color:#2a0006" data-act="delok" data-id="${d.id}">Delete</button><button class="btn ghost block" data-act="close">Cancel</button></div>`, true);
     },
+    syncin: () => Sync.signIn(),
+    syncout: () => { Sync.signOut().then(() => toast('Signed out on this device')); },
     delok: d => {
+      state.deleted = Object.assign({}, state.deleted, { [d.id]: Date.now() });
       state.profiles = state.profiles.filter(q => q.id !== d.id);
       if (state.current === d.id) state.current = state.profiles[0] ? state.profiles[0].id : null;
       S.pSel = null; closeSheet(); save(); render();
@@ -27635,6 +27867,7 @@ const Sfx = (() => {
   World.init($('#world'));
   FX.init($('#fx'));
   if (SELFTEST) { selfTest(); return; }
+  Sync.boot();
   render();
   Cloud.init(remote => {
     if (remote && remote.v === 1 && (remote.updatedAt || 0) > (state.updatedAt || 0)) {

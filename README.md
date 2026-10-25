@@ -42,3 +42,26 @@ git add -A && git commit -m "Describe the change" && git push
 ```
 
 Opening `index.html#selftest` in a browser runs the same checks across all grades inside the game, including drawing every picture.
+
+## Online saving (optional)
+
+With a free Firebase project, a parent can sign in with Google (Parents → Online saving) and every device signed in to that account shares the same players, wishes and PIN. Each player is stored as its own document, so two children playing at the same time on different devices don't overwrite each other. Without it, progress stays in each device's browser.
+
+1. In the [Firebase console](https://console.firebase.google.com), create a project.
+2. Authentication → Sign-in method → enable **Google**. Under Settings → Authorized domains, add the site's domain (for example `rendorf.github.io`).
+3. Firestore Database → create a database in production mode, then publish these rules:
+
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /families/{uid}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}
+```
+
+4. Project settings → Your apps → add a Web app, copy its `firebaseConfig`, paste it into `src/config.js` as `PMLM_FIREBASE`, then rebuild and push.
+
+The web config is public by design; the rules above make sure each Google account can only read and write its own family's data.
