@@ -37,7 +37,7 @@ Run these from the repo root.
 - **In-game self-test:** open `index.html#selftest`, then read `window.__selftest`. It must show 201 skills and 0 problems.
 - **Family-account flow tests:** `python3 tools/make-synctest.py` writes `build/synctest.html`, which uses the mock backend. Each "device" is a localStorage snapshot and the mock "server" lives in sessionStorage.
 - **Rules tests:** run `cd tools/rules-test && npm install && npm run emulator` in one terminal, then `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm test`. Needs Java (Homebrew `openjdk`).
-- **Deploy:** commit, then `git push`. Pages updates in 1–2 minutes. Confirm with `curl -s https://rendorf.github.io/play-more-learn-more/ | grep "const BUILD"`. Children's devices must reload to get it.
+- **Deploy:** `main` is protected: nobody can push to it directly. Work on a branch, `git push -u origin <branch>`, open a pull request (`gh pr create`), and turn on auto-merge (`gh pr merge --auto --merge`). It merges once the **test** check (`tests/run-all.sh`) passes on a branch that is up to date with `main` (use "Update branch" if `main` moved). Pages updates 1–2 minutes later. Confirm with `curl -s https://rendorf.github.io/play-more-learn-more/ | grep "const BUILD"`. Children's devices must reload to get it.
 
 ## How things work
 - **Progress:** stored in `localStorage` key `pmlm.v1`, plus Firebase sync when signed in.
