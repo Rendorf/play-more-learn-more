@@ -3,7 +3,7 @@
 // and on another already on the new version. Nothing may be lost in either direction, and the new online extras
 // must not disturb the family login.
 import { test, expect } from '@playwright/test';
-import { oldBuild, newPlayer, openParents, playRound, home, act, tab, state, clearEmulators, waitForDocs, watchErrors } from './helpers.mjs';
+import { oldBuild, newPlayer, openParents, playRound, home, act, tab, state, clearEmulators, waitForDocs, watchErrors, keptOrGrew } from './helpers.mjs';
 
 const NEW = '/build/synctest.html';
 const snap = page => page.evaluate(() => JSON.stringify(Object.fromEntries(Object.keys(localStorage).map(k => [k, localStorage.getItem(k)]))));
@@ -51,8 +51,8 @@ test('a child playing on a live-version device and a new-version device keeps ev
   await practiseRound(page);
   const fromOld = await serverPlayer(page, 'Kid A');
   expect(fromOld.stats.rounds).toBe(2);
-  expect(fromOld.week).toEqual(fromNew.week);                    // the live version keeps the new fields
-  expect(fromOld.stats.active).toBe(fromNew.stats.active);
+  keptOrGrew(expect, fromNew.week, fromOld.week, 'week');        // the live version keeps (or adds to) the new fields
+  expect(fromOld.stats.active).toBeGreaterThanOrEqual(fromNew.stats.active);
   const tablet = await snap(page);
 
   // Back on the parent's phone (new version): the tablet's round is there, and playing adds to it

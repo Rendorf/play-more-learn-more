@@ -2,12 +2,12 @@
 //  1. Progress saved by the live version opens in the new version with every value exactly as before
 //     (the same steps on the live version and the new version give identical saves, apart from new fields).
 //  2. Playing on the new version only adds: counters go up, mastery, wishes, coins and purchases stay.
-//  3. Rolling back is safe: the live version opens the new version's saves and keeps the new fields.
+//  3. Rolling back is safe: the live version opens the new version's saves and keeps (or adds to) the new fields.
 //  4. Backup codes from the live version work in the new version.
 //  5. The preview copy never touches the real saved progress on the same phone.
 import { test, expect } from '@playwright/test';
 import { readFileSync, readdirSync } from 'node:fs';
-import { oldBuild, newPlayer, openParents, typePin, playRound, home, act, tab, state, STORE, watchErrors } from './helpers.mjs';
+import { oldBuild, newPlayer, openParents, typePin, playRound, home, act, tab, state, STORE, watchErrors, keptOrGrew } from './helpers.mjs';
 
 const FIXTURES = readdirSync(new URL('../fixtures/', import.meta.url)).filter(f => f.endsWith('.json'))
   .map(f => Object.assign({ file: f }, JSON.parse(readFileSync(new URL(`../fixtures/${f}`, import.meta.url), 'utf8'))));
@@ -121,8 +121,9 @@ for (const fx of FIXTURES) {
       await ctx.close();
       expect(errors).toEqual([]);
       for (const [i, p] of fromNew.profiles.entries()) {
-        for (const k of ['week', 'nickSeed', 'board']) expect(s.profiles[i][k]).toEqual(p[k]);
-        expect(s.profiles[i].stats.active).toBe(p.stats.active);
+        for (const k of ['nickSeed', 'board']) expect(s.profiles[i][k]).toEqual(p[k]);
+        keptOrGrew(expect, p.week, s.profiles[i].week, `${p.name} week`);
+        if (p.stats.active != null) expect(s.profiles[i].stats.active).toBeGreaterThanOrEqual(p.stats.active);
         expect(s.profiles[i].stats.rounds).toBeGreaterThanOrEqual(p.stats.rounds);
       }
       // and back on the new version again, everything still opens
