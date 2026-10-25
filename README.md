@@ -43,25 +43,39 @@ git add -A && git commit -m "Describe the change" && git push
 
 Opening `index.html#selftest` in a browser runs the same checks across all grades inside the game, including drawing every picture.
 
-## Online saving (optional)
+## Family accounts (optional)
 
-With a free Firebase project, a parent can sign in with Google (Parents → Online saving) and every device signed in to that account shares the same players, wishes and PIN. Each player is stored as its own document, so two children playing at the same time on different devices don't overwrite each other. Without it, progress stays in each device's browser.
+With a free Firebase project, all the children's progress is kept in one online database:
 
-1. In the [Firebase console](https://console.firebase.google.com), create a project.
-2. Authentication → Sign-in method → enable **Google**. Under Settings → Authorized domains, add the site's domain (for example `rendorf.github.io`).
-3. Firestore Database → create a database in production mode, then publish these rules:
+- **Parents** log in with email and password or with Google (Parents tab, or "Parent login" on the welcome screen). A parent sees every child's progress on any device and manages wishes, grades, players and linked devices. The Parents tab needs no PIN on a parent's own login.
+- **A child's device** joins once with a link code. The parent taps **Link a child's device** in their dashboard, and the child types the 8-character code under **Link to my family**. Kids never see a parent password. A parent can unlink a device at any time.
+- **A second parent** joins with an invite code (Devices and parents → Invite another parent).
+- Each player is its own document, so two children playing at the same time on different devices don't overwrite each other. Play continues offline and uploads later.
 
+Without a Firebase project, progress stays in each device's browser, and backup codes can bring players from one device to another.
+
+### Setup
+
+1. In the [Firebase console](https://console.firebase.google.com), create a project (Google Analytics can be off).
+2. **Authentication → Sign-in method:** enable **Email/Password**, **Google** and **Anonymous**. Anonymous sign-in is what linked children's devices use.
+3. **Authentication → Settings → Authorized domains:** add the site's domain (for example `rendorf.github.io`).
+4. **Firestore Database:** create a database in production mode. On the **Rules** tab, paste the whole of [`firestore.rules`](firestore.rules) and publish.
+5. **Project settings → Your apps:** add a Web app, copy its `firebaseConfig`, paste it into `src/config.js` as `PMLM_FIREBASE`, then rebuild and push.
+
+The web config is public by design. The rules make sure only a family's parents and linked devices can read or write that family's data, link codes expire (15 minutes for devices, 24 hours for parent invites), and codes can't be listed or guessed in bulk.
+
+### Testing the rules
+
+`tools/rules-test` checks `firestore.rules` in Google's Firestore emulator (needs Java 11 or newer). Install once, start the emulator in one terminal, then run the tests in another:
+
+```bash
+cd tools/rules-test && npm install
 ```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /families/{uid}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
-    }
-  }
-}
+
+```bash
+cd tools/rules-test && npm run emulator
 ```
 
-4. Project settings → Your apps → add a Web app, copy its `firebaseConfig`, paste it into `src/config.js` as `PMLM_FIREBASE`, then rebuild and push.
-
-The web config is public by design; the rules above make sure each Google account can only read and write its own family's data.
+```bash
+cd tools/rules-test && FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm test
+```

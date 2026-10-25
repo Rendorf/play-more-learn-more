@@ -1,0 +1,65 @@
+rules_version = '2';
+
+// Play More Learn More family accounts.
+// Parents sign in with email/password or Google; children's devices sign in anonymously and join a
+// family with a short-lived link code. Only parents and linked devices of a family can read or
+// write that family's data. Paste this whole file into Firebase console → Firestore → Rules.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isAnonymous() { return request.auth.token.firebase.sign_in_provider == 'anonymous'; }
+    function isParent(fid) {
+      return signedIn() && exists(/databases/$(database)/documents/families/$(fid)/parents/$(request.auth.uid));
+    }
+    function isDevice(fid) {
+      return signedIn() && exists(/databases/$(database)/documents/families/$(fid)/devices/$(request.auth.uid));
+    }
+    function isMember(fid) { return isParent(fid) || isDevice(fid); }
+    function validCode(code, fid, role) {
+      let c = get(/databases/$(database)/documents/codes/$(code)).data;
+      return c.fid == fid && c.role == role && c.expires > request.time;
+    }
+
+    // Where each signed-in account's family is. A pointer only: it never grants access by itself.
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // Link codes: readable one at a time by id (never listed), made and removed by that family's parents.
+    match /codes/{code} {
+      allow get: if signedIn();
+      allow create: if isParent(request.resource.data.fid)
+        && request.resource.data.role in ['device', 'parent']
+        && request.resource.data.expires is timestamp
+        && request.resource.data.expires < request.time + duration.value(2, 'd');
+      allow delete: if isParent(resource.data.fid);
+    }
+
+    match /families/{fid} {
+      // A parent's first sign-in creates a family whose id is their own account id.
+      allow create: if signedIn() && !isAnonymous() && request.auth.uid == fid;
+      allow read, update: if isMember(fid);
+
+      match /parents/{uid} {
+        allow create: if signedIn() && !isAnonymous() && request.auth.uid == uid
+          && (fid == uid || validCode(request.resource.data.code, fid, 'parent'));
+        allow read: if isParent(fid) || (signedIn() && request.auth.uid == uid);
+        allow delete: if isParent(fid);
+      }
+
+      match /devices/{uid} {
+        allow create: if signedIn() && request.auth.uid == uid
+          && validCode(request.resource.data.code, fid, 'device');
+        allow read: if isParent(fid) || (signedIn() && request.auth.uid == uid);
+        allow update: if signedIn() && request.auth.uid == uid
+          && request.resource.data.code == resource.data.code;
+        allow delete: if isParent(fid) || (signedIn() && request.auth.uid == uid);
+      }
+
+      match /players/{pid} {
+        allow read, write: if isMember(fid);
+      }
+    }
+  }
+}

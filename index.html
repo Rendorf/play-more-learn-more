@@ -160,6 +160,8 @@ nav.tabs[hidden], header.top[hidden] { display: none !important; }
 .famcard .fav { font-size: 2.2rem; line-height: 1; }
 .famcard.on { box-shadow: inset 0 0 0 3px var(--accent); }
 
+.codebox { align-self: center; padding: 10px 22px; border-radius: 16px; background: var(--panel2); box-shadow: inset 0 0 0 3px var(--accent); font-family: var(--font-display); font-weight: 800; font-size: clamp(1.8rem, 8vw, 2.6rem); letter-spacing: .12em; font-variant-numeric: tabular-nums; user-select: all; }
+
 /* Quests */
 .quest { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; }
 .quest .qi { font-size: 1.5rem; }
@@ -26594,43 +26596,79 @@ const Sfx = (() => {
     };
   })();
 
-  // Family sync for the GitHub Pages / offline copy: Google sign-in + Firestore.
-  // Each player is its own document (families/{uid}/players/{id}) so two kids playing at once never
-  // overwrite each other; the PIN, money symbol, player order and deletions live on families/{uid}.
-  // Newer updatedAt wins. Which player is active stays per device.
+  // Family accounts for the GitHub Pages / offline copy (Firebase Auth + Firestore, rules in firestore.rules).
+  // Parents log in with email/password or Google; a child's device joins with a one-time link code and an
+  // anonymous sign-in. Each player is its own document (families/{fid}/players/{id}) so two children playing
+  // at once never overwrite each other; the PIN, money symbol, player order and deletions live on
+  // families/{fid}. Newer updatedAt wins. Which player is active stays per device.
   const Sync = (() => {
     const CFG = typeof PMLM_FIREBASE !== 'undefined' ? PMLM_FIREBASE : null;
     const enabled = !!CFG && !IN_ARTIFACT;
     const SDK = 'https://www.gstatic.com/firebasejs/10.14.1/';
     const FLAG = 'pmlm.sync';
-    let fb = null, db = null, user = null, unsubs = [], status = 'off', loading = null;
+    const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+    let fb = null, db = null, user = null, fid = null, role = null, me = {}, status = 'off', loading = null, flow = false;
+    let unsubs = [], devices = [], parents = [], code = null, dupes = [];
     let known = {}, knownShared = '', dirty = new Set(), dirtyShared = false, timer = 0, writing = false, pendingRemote = {};
 
     const strip = p => { const { updatedAt, ...rest } = p; return JSON.stringify(rest); };
     const sharedOf = () => JSON.stringify({ pin: state.pin, currency: state.settings.currency, timer: state.settings.timer, order: state.profiles.map(p => p.id), deleted: state.deleted || {} });
-    const base = () => db.collection('families').doc(user.uid);
-    const LABELS = { off: 'Not signed in', loading: 'Connecting…', synced: 'All changes saved online ✓', saving: 'Saving…', offline: 'Offline. Changes will upload when the internet is back.', error: 'Could not reach online saving. Changes are kept on this device and will retry.' };
+    const fam = () => db.collection('families').doc(fid);
+    const fmtCode = c => c.slice(0, 4) + '-' + c.slice(4);
+    const normCode = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const userError = msg => Object.assign(new Error(msg), { userMessage: msg });
+    const LABELS = {
+      off: 'Not connected', loading: 'Connecting…', synced: 'All changes saved online ✓', saving: 'Saving…',
+      offline: 'Offline. Changes will upload when the internet is back.',
+      error: 'Could not reach the family database. Changes are kept on this device and will retry.',
+      unlinked: 'This device was unlinked from the family. Its players are still on this device.',
+    };
     const ICONS = { synced: '☁️', saving: '⏳', loading: '⏳', offline: '📴', error: '⚠️' };
+    const WRONG_LOGIN = 'That email or password is not right.';
+    const MESSAGES = {
+      'auth/invalid-credential': WRONG_LOGIN, 'auth/invalid-login-credentials': WRONG_LOGIN, 'auth/wrong-password': WRONG_LOGIN, 'auth/user-not-found': WRONG_LOGIN,
+      'auth/email-already-in-use': 'There is already an account with this email. Tap Sign in instead.',
+      'auth/weak-password': 'Use a password with at least 6 characters.',
+      'auth/invalid-email': 'That email address does not look right.',
+      'auth/missing-password': 'Type a password.',
+      'auth/missing-email': 'Type your email address.',
+      'auth/too-many-requests': 'Too many tries. Wait a few minutes and try again.',
+      'auth/network-request-failed': 'No internet connection. Connect and try again.',
+      'auth/popup-blocked': 'Tap "Continue with Google" once more to open the Google window.',
+      'auth/popup-closed-by-user': '', 'auth/cancelled-popup-request': '',
+      'auth/operation-not-allowed': 'This sign-in method is not switched on in the Firebase project yet.',
+      'auth/admin-restricted-operation': 'Linking devices is not switched on yet (Anonymous sign-in in the Firebase project).',
+      'auth/unauthorized-domain': 'This website is not on the Firebase project\'s list of authorized domains yet.',
+      'permission-denied': 'The family database refused this. Check the code and try again.',
+    };
+    const friendly = e => (e && e.userMessage) || (e && e.code in MESSAGES ? MESSAGES[e.code] : 'Something went wrong. Check the internet connection and try again.');
 
     function setStatus(s) {
       status = s;
       const el = document.getElementById('syncstatus'); if (el) el.textContent = LABELS[s];
       const chip = document.getElementById('syncchip'); if (chip) chip.textContent = ICONS[s] || '☁️';
     }
+    function flag(on) { try { on ? localStorage.setItem(FLAG, '1') : localStorage.removeItem(FLAG); } catch (e) { /* storage blocked */ } }
+    function rerender() {
+      const typing = document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+      if (S.screen !== 'round' && S.screen !== 'lesson' && S.screen !== 'new' && !typing && !document.querySelector('.overlay, .celebrate')) {
+        S.keepScroll = true; render(); S.keepScroll = false;
+      }
+    }
+    function afterRemote() { save(); rerender(); }
     const loadScript = src => new Promise((res, rej) => {
       const s = document.createElement('script');
-      s.src = src; s.onload = res; s.onerror = () => rej(new Error('Could not load ' + src));
+      s.src = src; s.onload = res; s.onerror = () => rej(userError('Could not load the sign-in service. Check the internet connection.'));
       document.head.appendChild(s);
     });
     function ensureSdk() {
-      if (!enabled) return Promise.reject(new Error('off'));
+      if (!enabled) return Promise.reject(userError('Online saving is not set up for this copy of the game.'));
       if (!loading) loading = (async () => {
         if (!window.firebase) for (const f of ['app', 'auth', 'firestore']) await loadScript(`${SDK}firebase-${f}-compat.js`);
         fb = window.firebase;
         if (!fb.apps.length) fb.initializeApp(CFG);
         db = fb.firestore();
-        fb.auth().onAuthStateChanged(onUser);
-        fb.auth().getRedirectResult().catch(() => {});
+        fb.auth().onAuthStateChanged(u => { if (!flow && (!u || !user || u.uid !== user.uid)) onUser(u); });
         return fb;
       })().catch(e => { loading = null; throw e; });
       return loading;
@@ -26651,30 +26689,31 @@ const Sfx = (() => {
       }
       const sj = sharedOf();
       if (sj !== knownShared) { knownShared = sj; state.sharedAt = now; dirtyShared = true; }
-      if (user && (dirty.size || dirtyShared)) { clearTimeout(timer); timer = setTimeout(flush, 1500); }
+      if (fid && (dirty.size || dirtyShared)) { clearTimeout(timer); timer = setTimeout(flush, 1500); }
     }
     async function flush() {
-      if (!user || writing) return;
+      if (!fid || writing) return;
       writing = true; setStatus('saving');
-      const ids = [...dirty], shared = dirtyShared;
+      const ids = [...dirty], shared = dirtyShared, held = new Set(dupes.map(d => d.local.id));
       dirty.clear(); dirtyShared = false;
       try {
         for (const id of ids) {
           const p = state.profiles.find(x => x.id === id);
-          if (p) await base().collection('players').doc(id).set({ data: JSON.stringify(p), updatedAt: p.updatedAt || Date.now() });
+          if (p && !held.has(id)) await fam().collection('players').doc(id).set({ data: JSON.stringify(p), updatedAt: p.updatedAt || Date.now() });
         }
         if (shared) {
-          await base().set({ shared: knownShared, updatedAt: state.sharedAt || Date.now() });
-          for (const id of Object.keys(state.deleted || {})) await base().collection('players').doc(id).delete();
+          await fam().set({ shared: knownShared, updatedAt: state.sharedAt || Date.now() }, { merge: true });
+          for (const id of Object.keys(state.deleted || {})) await fam().collection('players').doc(id).delete();
         }
         setStatus(navigator.onLine === false ? 'offline' : 'synced');
       } catch (e) {
         ids.forEach(id => dirty.add(id)); if (shared) dirtyShared = true;
+        if (e && e.code === 'permission-denied') { writing = false; return unlinked(); }
         setStatus(navigator.onLine === false ? 'offline' : 'error');
         clearTimeout(timer); timer = setTimeout(flush, 15000);
       }
       writing = false;
-      if (user && (dirty.size || dirtyShared)) { clearTimeout(timer); timer = setTimeout(flush, 1500); }
+      if (fid && (dirty.size || dirtyShared)) { clearTimeout(timer); timer = setTimeout(flush, 1500); }
     }
 
     function applyProfile(p) {
@@ -26686,7 +26725,7 @@ const Sfx = (() => {
       known[p.id] = strip(p);
       return true;
     }
-    // joining = this device is signing in to an existing family: the family's PIN and settings win
+    // joining = this device is connecting to an existing family: the family's PIN and settings win
     function applyShared(d, joining) {
       let sh;
       try { sh = JSON.parse(d.shared); } catch (e) { return false; }
@@ -26708,51 +26747,144 @@ const Sfx = (() => {
       knownShared = sharedOf();
       return true;
     }
-    function afterRemote() {
-      save();
-      const typing = document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
-      if (S.screen !== 'round' && S.screen !== 'lesson' && S.screen !== 'new' && !typing && !document.querySelector('.overlay, .celebrate')) {
-        S.keepScroll = true; render(); S.keepScroll = false;
-      }
+
+    function stopListening() { unsubs.forEach(f => f()); unsubs = []; devices = []; parents = []; }
+    async function unlinked() {
+      stopListening();
+      if (user && db) db.collection('users').doc(user.uid).delete().catch(() => {});
+      fid = null; role = null; me = {}; flag(false);
+      setStatus('unlinked'); toast(LABELS.unlinked); rerender();
     }
 
+    // Restore on page load or react to sign-out
     async function onUser(u) {
-      unsubs.forEach(f => f()); unsubs = [];
-      user = u;
-      if (!u) { try { localStorage.removeItem(FLAG); } catch (e) { /* storage blocked */ } setStatus('off'); return afterRemote(); }
-      try { localStorage.setItem(FLAG, '1'); } catch (e) { /* storage blocked */ }
+      stopListening();
+      user = u; fid = null; role = null; me = {};
+      if (!u) { flag(false); setStatus('off'); return rerender(); }
       setStatus('loading');
       try {
-        const [fam, players] = await Promise.all([base().get(), base().collection('players').get()]);
-        const remoteAt = {};
-        players.forEach(doc => { const d = doc.data(); remoteAt[doc.id] = d.updatedAt || 0; try { applyProfile(JSON.parse(d.data)); } catch (e) { /* skip bad doc */ } });
-        if (fam.exists) applyShared(fam.data(), true);
-        for (const p of state.profiles) if (!(p.id in remoteAt) || (p.updatedAt || 0) > remoteAt[p.id]) dirty.add(p.id);
-        knownShared = sharedOf();
-        dirtyShared = !fam.exists || fam.data().shared !== knownShared;
-        if (dirtyShared) state.sharedAt = Date.now();
-        afterRemote();
-        unsubs.push(base().collection('players').onSnapshot(snap => {
-          let changed = false;
-          snap.docChanges().forEach(ch => {
-            if (ch.type === 'removed' || ch.doc.metadata.hasPendingWrites) return;
-            try { changed = applyProfile(JSON.parse(ch.doc.data().data)) || changed; } catch (e) { /* skip bad doc */ }
-          });
-          if (changed) afterRemote();
-        }, () => setStatus('error')));
-        unsubs.push(base().onSnapshot(doc => {
-          if (!doc.exists || doc.metadata.hasPendingWrites) return;
-          if (applyShared(doc.data())) afterRemote();
-        }, () => setStatus('error')));
-        setStatus('synced');
-        if (dirty.size || dirtyShared) flush();
-      } catch (e) { setStatus('error'); }
+        const ud = await db.collection('users').doc(u.uid).get();
+        if (ud.exists && ud.data().fid) {
+          fid = ud.data().fid; role = ud.data().role;
+          const mem = await fam().collection(role === 'parent' ? 'parents' : 'devices').doc(u.uid).get();
+          if (!mem.exists) return unlinked();
+          me = mem.data();
+        } else if (!u.isAnonymous) {
+          await createFamily(u);
+        } else { setStatus('off'); return rerender(); }
+        flag(true);
+        await startSync();
+      } catch (e) {
+        if (e && e.code === 'permission-denied') return unlinked();
+        setStatus(navigator.onLine === false ? 'offline' : 'error');
+      }
+    }
+    async function createFamily(u) {
+      fid = u.uid; role = 'parent'; me = { email: u.email || '', joinedAt: Date.now() };
+      const b = db.batch();
+      b.set(db.collection('families').doc(fid), { createdBy: u.uid, shared: sharedOf(), updatedAt: Date.now() }, { merge: true });
+      b.set(fam().collection('parents').doc(u.uid), me);
+      b.set(db.collection('users').doc(u.uid), { fid, role });
+      await b.commit();
+    }
+    async function join(j) {
+      const snap = await db.collection('codes').doc(j.code).get();
+      const c = snap.exists ? snap.data() : null;
+      if (!c) throw userError('That code was not found. Check the letters and try again.');
+      if (c.role !== j.role) throw userError(c.role === 'parent' ? 'That is an invite code for a parent. Use it under "Parent login" instead.' : 'That code is for linking a child\'s device, not for a parent account.');
+      if (c.expires.toMillis() < Date.now()) throw userError('That code has expired. Ask for a new one.');
+      fid = c.fid; role = j.role;
+      me = j.role === 'device' ? { name: j.name, code: j.code, linkedAt: Date.now(), lastSeen: Date.now() } : { email: user.email || '', code: j.code, joinedAt: Date.now() };
+      const b = db.batch();
+      b.set(fam().collection(j.role === 'device' ? 'devices' : 'parents').doc(user.uid), me);
+      b.set(db.collection('users').doc(user.uid), { fid, role });
+      await b.commit();
+    }
+
+    async function startSync() {
+      setStatus('loading');
+      const [famDoc, players] = await Promise.all([fam().get(), fam().collection('players').get()]);
+      const remoteAt = {}, remote = [];
+      players.forEach(doc => {
+        const d = doc.data(); remoteAt[doc.id] = d.updatedAt || 0;
+        try { const p = JSON.parse(d.data); remote.push(p); applyProfile(p); } catch (e) { /* skip a bad document */ }
+      });
+      if (famDoc.exists && famDoc.data().shared) applyShared(famDoc.data(), true);
+      // The same child on this device and in the family? Ask before uploading this copy.
+      const key = p => p.name.trim().toLowerCase() + '|' + p.grade;
+      const byKey = new Map(remote.map(p => [key(p), p]));
+      dupes = state.profiles.filter(p => !(p.id in remoteAt) && byKey.has(key(p))).map(p => ({ local: p, remote: byKey.get(key(p)) }));
+      dirty = new Set();
+      for (const p of state.profiles) if (!(p.id in remoteAt) || (p.updatedAt || 0) > remoteAt[p.id]) dirty.add(p.id);
+      knownShared = sharedOf();
+      dirtyShared = !famDoc.exists || famDoc.data().shared !== knownShared;
+      if (dirtyShared) state.sharedAt = Date.now();
+      afterRemote();
+      listen();
+      if (role === 'device') fam().collection('devices').doc(user.uid).update({ lastSeen: Date.now() }).catch(() => {});
+      setStatus('synced');
+      if (dirty.size || dirtyShared) flush();
+      if (dupes.length) setTimeout(askDupe, 700);
+    }
+    function listen() {
+      const failed = e => (e && e.code === 'permission-denied' ? unlinked() : setStatus('error'));
+      unsubs.push(fam().collection('players').onSnapshot(snap => {
+        let changed = false;
+        snap.docChanges().forEach(ch => {
+          if (ch.type === 'removed' || ch.doc.metadata.hasPendingWrites) return;
+          try { changed = applyProfile(JSON.parse(ch.doc.data().data)) || changed; } catch (e) { /* skip a bad document */ }
+        });
+        if (changed) afterRemote();
+      }, failed));
+      unsubs.push(fam().onSnapshot(doc => {
+        if (!doc.exists || doc.metadata.hasPendingWrites || !doc.data().shared) return;
+        if (applyShared(doc.data())) afterRemote();
+      }, failed));
+      if (role !== 'parent') return;
+      unsubs.push(fam().collection('devices').onSnapshot(s => {
+        devices = s.docs.map(d => Object.assign({ id: d.id }, d.data()));
+        if (code && code.role === 'device' && devices.some(d => d.code === code.code)) code.used = true;
+        rerender();
+      }, () => {}));
+      unsubs.push(fam().collection('parents').onSnapshot(s => {
+        parents = s.docs.map(d => Object.assign({ id: d.id }, d.data()));
+        if (code && code.role === 'parent' && parents.some(p => p.code === code.code)) code.used = true;
+        rerender();
+      }, () => {}));
+    }
+    function askDupe() {
+      const d = dupes[0];
+      if (!d) return;
+      if (document.querySelector('.overlay, .celebrate')) { setTimeout(askDupe, 800); return; }
+      openSheet(`<div class="stack center"><h2>Is this the same ${h(d.local.name)}?</h2>
+        <p class="muted">Your family already has ${h(d.remote.avatar)} ${h(d.remote.name)} (Grade ${d.remote.grade}). This device also has ${h(d.local.avatar)} ${h(d.local.name)} (Grade ${d.local.grade}).</p>
+        <button class="btn primary block" data-act="dupyes">Yes, combine them</button>
+        <button class="btn ghost block" data-act="dupno">No, keep both</button></div>`, true);
+    }
+    async function parentFlow(signIn, invite) {
+      if (flow) return;
+      flow = true;
+      try {
+        await ensureSdk();
+        const cred = await signIn();
+        user = cred.user;
+        const inv = normCode(invite);
+        if (inv) {
+          stopListening();
+          // A refused invite code must not leave a signed-in parent without a family (a reload would make a new one)
+          try { await join({ code: inv, role: 'parent' }); }
+          catch (e) { fid = null; role = null; user = null; await fb.auth().signOut(); throw e; }
+          flag(true); await startSync();
+        } else await onUser(user);
+        if (!fid) throw userError('Signed in, but the family could not be opened. Check the internet connection and try again.');
+      } finally { flow = false; }
     }
 
     return {
       enabled,
-      get user() { return user; },
-      get status() { return status; },
+      friendly,
+      get isParent() { return !!fid && role === 'parent'; },
+      get isDevice() { return !!fid && role === 'device'; },
       prime,
       track,
       boot() {
@@ -26761,30 +26893,82 @@ const Sfx = (() => {
         let f = null;
         try { f = localStorage.getItem(FLAG); } catch (e) { /* storage blocked */ }
         if (f) ensureSdk().catch(() => setStatus('offline'));
-        addEventListener('online', () => { if (user) { setStatus('synced'); flush(); } });
-        addEventListener('offline', () => { if (user) setStatus('offline'); });
+        addEventListener('online', () => { if (fid) { setStatus('synced'); flush(); } });
+        addEventListener('offline', () => { if (fid) setStatus('offline'); });
       },
-      // Load the SDK early where a sign-in button is shown, so the tap can open the Google popup directly
-      warm() { if (enabled && !user) ensureSdk().catch(() => {}); },
-      async signIn() {
+      // Load the SDK early where a sign-in button is shown, so a tap can open the Google popup directly
+      warm() { if (enabled && !fid) ensureSdk().catch(() => {}); },
+      loginEmail: (email, pw, invite) => parentFlow(() => fb.auth().signInWithEmailAndPassword(String(email || '').trim(), pw || ''), invite),
+      signupEmail: (email, pw, invite) => parentFlow(() => fb.auth().createUserWithEmailAndPassword(String(email || '').trim(), pw || ''), invite),
+      loginGoogle: invite => parentFlow(() => {
+        const provider = new fb.auth.GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: 'select_account' });
+        return fb.auth().signInWithPopup(provider);
+      }, invite),
+      async resetPassword(email) {
+        await ensureSdk();
+        await fb.auth().sendPasswordResetEmail(String(email || '').trim());
+      },
+      async link(codeText, name) {
+        const c = normCode(codeText);
+        if (c.length !== 8) throw userError('The code has 8 letters and numbers, like ABCD-EFGH.');
+        if (flow) return;
+        flow = true;
         try {
-          if (!fb) { setStatus('loading'); await ensureSdk(); }
-          const provider = new fb.auth.GoogleAuthProvider();
-          provider.setCustomParameters({ prompt: 'select_account' });
-          try { await fb.auth().signInWithPopup(provider); }
-          catch (e) {
-            if (e && e.code === 'auth/popup-blocked') toast('Tap "Sign in with Google" once more to open the Google window.');
-            else if (e && /cancelled|closed-by-user/.test(e.code || '')) { /* user closed the window */ }
-            else if (e && e.code === 'auth/operation-not-supported-in-this-environment') await fb.auth().signInWithRedirect(provider);
-            else throw e;
-            setStatus(user ? 'synced' : 'off');
-          }
-        } catch (e) {
-          setStatus(navigator.onLine === false ? 'offline' : 'off');
-          toast(navigator.onLine === false ? 'You are offline. Connect to the internet to sign in.' : 'Sign-in did not finish. Please try again.');
+          await ensureSdk();
+          const cur = fb.auth().currentUser;
+          if (!cur || !cur.isAnonymous) { if (cur) await fb.auth().signOut(); await fb.auth().signInAnonymously(); }
+          user = fb.auth().currentUser;
+          stopListening();
+          await join({ code: c, role: 'device', name: String(name || '').trim().slice(0, 30) || 'Child\'s device' });
+          flag(true);
+          await startSync();
+        } catch (e) { fid = null; role = null; throw e; }
+        finally { flow = false; }
+      },
+      async signOut() { stopListening(); fid = null; role = null; code = null; if (fb) await fb.auth().signOut(); },
+      async unlinkSelf() {
+        if (!fid || role !== 'device') return;
+        await fam().collection('devices').doc(user.uid).delete();
+        await db.collection('users').doc(user.uid).delete();
+        stopListening(); fid = null; role = null; me = {}; flag(false); setStatus('off');
+      },
+      async createCode(kind) {
+        if (role !== 'parent') return;
+        for (let attempt = 0; attempt < 5; attempt++) {
+          const c = Array.from(crypto.getRandomValues(new Uint32Array(8)), n => CODE_CHARS[n % CODE_CHARS.length]).join('');
+          const ms = Date.now() + (kind === 'device' ? 15 * 60 * 1000 : 24 * 3600 * 1000);
+          try {
+            await db.collection('codes').doc(c).set({ fid, role: kind, expires: fb.firestore.Timestamp.fromMillis(ms), createdBy: user.uid });
+            code = { code: c, role: kind, expires: ms, used: false };
+            rerender();
+            return code;
+          } catch (e) { if (attempt === 4) throw e; }
         }
       },
-      async signOut() { if (fb) await fb.auth().signOut(); },
+      clearCode() {
+        if (code && db) db.collection('codes').doc(code.code).delete().catch(() => {});
+        code = null; rerender();
+      },
+      unlinkDevice: id => fam().collection('devices').doc(id).delete(),
+      removeParent: id => fam().collection('parents').doc(id).delete(),
+      deviceName: id => (devices.find(d => d.id === id) || {}).name || 'this device',
+      // A same-named child was found when this device joined: combine into the family's copy, or keep both
+      resolveDupe(same) {
+        const d = dupes.shift();
+        closeSheet();
+        if (!d) return;
+        const target = state.profiles.find(p => p.id === d.remote.id);
+        if (same && target) {
+          combineProfiles(target, d.local);
+          state.aliases = Object.assign({}, state.aliases, { [d.local.id]: target.id });
+          state.profiles = state.profiles.filter(p => p.id !== d.local.id);
+          if (state.current === d.local.id) state.current = target.id;
+          toast(`Combined into ${h(target.name)}`);
+        } else dirty.add(d.local.id);
+        save(); rerender();
+        if (dupes.length) setTimeout(askDupe, 400);
+      },
       // Apply updates that arrived for the active player during a round. The round just played is
       // stamped first, so if the same player was used on two devices at once this device's round wins.
       settle() {
@@ -26792,19 +26976,37 @@ const Sfx = (() => {
         const ps = Object.values(pendingRemote); pendingRemote = {};
         if (ps.map(applyProfile).some(Boolean)) save();
       },
-      chip() { return user ? `<span class="chip" id="syncchip" title="Online saving">${ICONS[status] || '☁️'}</span>` : ''; },
+      chip() { return fid ? `<span class="chip" id="syncchip" title="Family account">${ICONS[status] || '☁️'}</span>` : ''; },
+      // Family account card for children's devices and not-yet-connected devices (Parents tab)
       card() {
         if (IN_ARTIFACT) return '';
-        if (!enabled) return `<div class="card stack"><h3>☁️ Online saving</h3><p class="muted" style="font-size:.9rem">Online saving isn't set up for this copy of the game, so progress stays on this device.</p></div>`;
-        if (!user) return `<div class="card stack"><h3>☁️ Online saving</h3>
-          <p style="font-size:.95rem">Sign in with Google to keep every player's progress, wishes and PIN the same on all your family's devices. Do it once on each device the kids use.</p>
+        if (!enabled) return `<div class="card stack"><h3>☁️ Family account</h3><p class="muted" style="font-size:.9rem">Online saving isn't set up for this copy of the game, so progress stays on this device.</p></div>`;
+        if (role === 'device') return `<div class="card stack"><h3>☁️ Family account</h3>
+          <p style="font-size:.95rem">Linked to your family as <b>${h(me.name || 'this device')}</b>. Progress saves online by itself, and parents can see it from their own login.</p>
           <p class="muted" id="syncstatus" style="font-size:.9rem">${LABELS[status]}</p>
-          <button class="btn primary" data-act="syncin">Sign in with Google</button></div>`;
-        return `<div class="card stack"><h3>☁️ Online saving</h3>
-          <p style="font-size:.95rem">Signed in as <b>${h(user.email || user.displayName || 'your Google account')}</b>. Every device signed in to this account shares the same players.</p>
+          <button class="btn small ghost" data-act="unlinkself">Unlink this device</button></div>`;
+        return `<div class="card stack"><h3>☁️ Family account</h3>
+          <p style="font-size:.95rem">${status === 'unlinked' ? h(LABELS.unlinked) + ' ' : ''}Link this device to your family so progress is saved online, or log in as a parent to see every child's progress.</p>
+          <div class="grid2"><button class="btn primary" data-act="linkopen">Link to my family</button><button class="btn" data-act="loginopen">Parent login</button></div></div>`;
+      },
+      // Devices and parents card for a logged-in parent
+      devicesCard() {
+        const day = t => (t ? new Date(t).toLocaleDateString() : '–');
+        let codeBox = '';
+        if (code && code.used) codeBox = `<div class="hintbox"><span class="hi">✅</span><span>${code.role === 'device' ? 'Linked! That device now saves to your family.' : 'The other parent has joined your family.'}</span></div><button class="btn small ghost" data-act="codedone">OK</button>`;
+        else if (code) codeBox = `<div class="codebox" aria-label="Link code">${fmtCode(code.code)}</div>
+          <p class="muted center" style="font-size:.88rem">${code.role === 'device' ? 'On the child\'s device tap <b>Link to my family</b> and type this code. It works for 15 minutes.' : 'The other parent opens the game, taps <b>Parent login</b>, signs in or creates an account, and types this code under <b>Invite code</b>. It works for 24 hours.'}</p>
+          <button class="btn small ghost" data-act="codedone">Cancel this code</button>`;
+        return `<div class="card stack"><h3>🔗 Devices and parents</h3>
+          <p class="muted" style="font-size:.9rem">Signed in as <b>${h((user && user.email) || 'parent')}</b>. Children's devices linked to your family save their progress here by themselves.</p>
           <p class="muted" id="syncstatus" style="font-size:.9rem">${LABELS[status]}</p>
-          <button class="btn small ghost" data-act="syncout">Sign out on this device</button>
-          <p class="muted" style="font-size:.85rem">Signing out keeps a copy of the players on this device but stops syncing.</p></div>`;
+          ${codeBox}
+          ${code ? '' : `<div class="grid2"><button class="btn primary" data-act="mkcode" data-r="device">Link a child's device</button><button class="btn" data-act="mkcode" data-r="parent">Invite another parent</button></div>`}
+          <span class="eyebrow">Linked devices · ${devices.length}</span>
+          ${devices.length ? devices.map(d => `<div class="row between"><span>📱 <b>${h(d.name)}</b> <span class="muted">· last seen ${day(d.lastSeen)}</span></span><button class="btn small ghost" data-act="unlinkdev" data-id="${h(d.id)}">Unlink</button></div>`).join('') : '<p class="muted" style="font-size:.9rem">No devices linked yet.</p>'}
+          <span class="eyebrow">Parents · ${parents.length}</span>
+          ${parents.map(p => `<div class="row between"><span>👤 ${h(p.email || 'Parent')}${user && p.id === user.uid ? ' <span class="muted">(you)</span>' : ''}</span>${user && p.id === user.uid ? '' : `<button class="btn small ghost" data-act="rmparent" data-id="${h(p.id)}">Remove</button>`}</div>`).join('')}
+          <button class="btn small ghost" data-act="signout">Sign out on this device</button></div>`;
       },
     };
   })();
@@ -27005,6 +27207,9 @@ const Sfx = (() => {
   function render() {
     applyTheme();
     if (R && R.timerId) { clearInterval(R.timerId); R.timerId = 0; }
+    if (S.screen === 'familyonly' && Sync.isParent) return renderFamilyOnly();
+    // A parent's own phone may have no player of its own: show the first child so the dashboard opens
+    if (!P() && Sync.isParent && state.profiles.length) state.current = state.profiles[0].id;
     const p = P();
     if (!p) return state.profiles.length ? renderPlayers() : renderWelcome();
     if (S.screen === 'lesson') return renderLesson();
@@ -27041,10 +27246,21 @@ const Sfx = (() => {
         <h1 class="logo"><span class="l1">Play More</span><span class="l2">Learn More</span></h1>
         <div class="mascot" style="justify-content:center"><div class="face">🤖</div><div class="bubble">Hi! I'm Blip. Let's make maths fun, one combo at a time!</div></div>
         <p class="center muted">Cambridge maths practice for Grades 1 to 9: short lessons, hints when you need them, and wishes to unlock.</p>
+        ${Sync.isParent ? '<p class="center"><b>You are logged in as a parent.</b> Your family has no players yet. Add one here, or link a child\'s device.</p>' : ''}
         <button class="btn primary block pulse" data-act="newplayer">Add a player</button>
-        ${Sync.enabled ? '<button class="btn ghost block" data-act="syncin">☁️ We already play on another device</button><p class="center muted" style="font-size:.85rem">A grown-up signs in with Google to load the family\'s players here.</p>' : ''}
+        ${Sync.isParent ? '<button class="btn block" data-act="familyonly">🔗 Link a child\'s device</button>'
+          : Sync.enabled ? `<div class="grid2"><button class="btn ghost" data-act="linkopen">🔗 Link to my family</button><button class="btn ghost" data-act="loginopen">👤 Parent login</button></div>
+            <p class="center muted" style="font-size:.85rem">Already playing on another device? A parent shows a link code in their dashboard. Type it here with "Link to my family".</p>` : ''}
       </div>`;
     Sync.warm();
+  }
+
+  // A logged-in parent whose family has no players yet: just the devices and parents card
+  function renderFamilyOnly() {
+    chrome(false);
+    view.innerHTML = `<div class="stack" style="padding-block:16px">
+      <div class="row between"><h2>Your family</h2><button class="iconbtn" data-act="home" aria-label="Back">✕</button></div>
+      ${Sync.devicesCard()}</div>`;
   }
 
   function renderPlayers() {
@@ -27613,7 +27829,8 @@ const Sfx = (() => {
 
   // ----- Parent area -----
   function renderParent() {
-    if (!S.parentOk) return renderPin();
+    // The PIN guards the Parents tab on children's devices; a logged-in parent's device skips it
+    if (!S.parentOk && !Sync.isParent) return renderPin();
     Sync.warm();
     const p = P(), sel = S.pSel || (S.pSel = { player: p.id, grade: p.grade });
     const who = state.profiles.find(x => x.id === sel.player) || p, gs = gradeState(who, sel.grade);
@@ -27640,11 +27857,15 @@ const Sfx = (() => {
     const ranked = pair ? pair.slice().sort((a, b) => lastActivity(b) - lastActivity(a)) : state.profiles;
     const cbKeep = ranked[0], cbFrom = ranked[1];
     view.innerHTML = `<div class="stack">
-      <div class="row between"><h2>Grown-ups</h2><button class="btn small ghost" data-act="lock">🔒 Lock</button></div>
+      <div class="row between"><h2>Grown-ups</h2>${Sync.isParent ? '' : '<button class="btn small ghost" data-act="lock">🔒 Lock</button>'}</div>
 
       <div class="card stack"><h3>👨‍👩‍👧 Family</h3>
         <div class="famgrid">${family}</div>
-        <p class="muted" style="font-size:.88rem">Tap a child to see their wishes and full report below. A child who plays on another device: on that device open <b>Parents → Backup → Copy backup code</b>, send it to yourself, paste it under <b>Backup</b> here and choose <b>Add these players</b>. Do it again any time to refresh their progress.${Sync.enabled ? ' Or sign in to Online saving on both devices to keep everyone in sync automatically.' : ''}</p></div>
+        <p class="muted" style="font-size:.88rem">Tap a child to see their wishes and full report below. ${Sync.isParent
+          ? 'Children\'s devices linked to your family update here by themselves. To add one, use <b>Link a child\'s device</b> below.'
+          : `A child who plays on another device: on that device open <b>Parents → Backup → Copy backup code</b>, send it to yourself, paste it under <b>Backup</b> here and choose <b>Add these players</b>. Do it again any time to refresh their progress.${Sync.enabled ? ' Or use a <b>Family account</b> (below) to keep everyone in sync by itself.' : ''}`}</p></div>
+
+      ${Sync.isParent ? Sync.devicesCard() : ''}
 
       <div class="grid2"><div class="field"><label for="ps-player">Player</label><select id="ps-player" data-change="psel">${state.profiles.map(x => sOpt(x.id, sel.player, x.name)).join('')}</select></div>
         <div class="field"><label for="ps-grade">Grade</label><select id="ps-grade" data-change="psel">${GRADES.map(g => sOpt(g, sel.grade, 'Grade ' + g)).join('')}</select></div></div>
@@ -27682,7 +27903,7 @@ const Sfx = (() => {
         <label class="toggle">Music during rounds <input type="checkbox" data-change="set" data-k="music" ${state.settings.music ? 'checked' : ''}></label>
         <label class="toggle"><span>Speed bonus <span class="muted" style="font-weight:400">(a timer bar; fast answers earn extra brain power, nothing is lost)</span></span><input type="checkbox" data-change="set" data-k="timer" ${state.settings.timer ? 'checked' : ''}></label>        <div class="field" style="margin-top:8px"><label for="cur">Money symbol</label><select id="cur" data-change="currency">${['₼', '$', '£', '€', '₽', '₺', '₹'].map(c => sOpt(c, state.settings.currency, c.trim())).join('')}</select></div></div>
 
-      ${Sync.card()}
+      ${Sync.isParent ? '' : Sync.card()}
 
       <div class="card stack"><h3>💾 Backup</h3>
         <p class="muted" style="font-size:.9rem">Progress is saved on this device${IN_ARTIFACT ? ' and in your claude.ai account' : ''}. Copy the backup code to keep a copy, or paste a code from another device to add its players here.</p>
@@ -27826,8 +28047,49 @@ const Sfx = (() => {
       openSheet(`<div class="stack center"><h2>Delete ${h(x.name)}?</h2><p class="muted">This removes the player and all their progress and wishes on this device.</p>
         <button class="btn block" style="background:var(--oops);color:#2a0006" data-act="delok" data-id="${d.id}">Delete</button><button class="btn ghost block" data-act="close">Cancel</button></div>`, true);
     },
-    syncin: () => Sync.signIn(),
-    syncout: () => { Sync.signOut().then(() => toast('Signed out on this device')); },
+    loginopen: () => {
+      Sync.warm();
+      openSheet(`<div class="stack"><div class="row between"><h2>Parent login</h2><button class="iconbtn" data-act="close" aria-label="Close">✕</button></div>
+        <p class="muted">See and manage every child's progress, on any device.</p>
+        <div class="field"><label for="pl-email">Email</label><input id="pl-email" type="email" autocomplete="username" inputmode="email"></div>
+        <div class="field"><label for="pl-pass">Password</label><input id="pl-pass" type="password" autocomplete="current-password"></div>
+        <div class="field"><label for="pl-invite">Invite code <span class="muted" style="font-weight:400">(only if another parent invited you)</span></label><input id="pl-invite" autocomplete="off" autocapitalize="characters" placeholder="ABCD-EFGH"></div>
+        <div class="feedback bad" id="pl-msg" aria-live="polite"></div>
+        <div class="grid2"><button class="btn primary" data-act="loginemail">Sign in</button><button class="btn" data-act="signupemail">Create account</button></div>
+        <button class="link" data-act="resetpw">Forgot password?</button>
+        <span class="eyebrow center">or</span>
+        <button class="btn ghost block" data-act="logingoogle">Continue with Google</button></div>`, true);
+    },
+    linkopen: () => {
+      Sync.warm();
+      const guess = state.profiles.length ? `${state.profiles[0].name}'s device` : '';
+      openSheet(`<div class="stack"><div class="row between"><h2>Link to my family</h2><button class="iconbtn" data-act="close" aria-label="Close">✕</button></div>
+        <p class="muted">A parent opens <b>Parents → Devices and parents → Link a child's device</b> on their own login and reads you the code.</p>
+        <div class="field"><label for="lk-code">Code</label><input id="lk-code" autocomplete="off" autocapitalize="characters" placeholder="ABCD-EFGH" maxlength="12" style="font-family:var(--font-display);font-size:1.6rem;text-align:center;letter-spacing:.12em"></div>
+        <div class="field"><label for="lk-name">Whose device is this?</label><input id="lk-name" maxlength="30" value="${h(guess)}" placeholder="Ayan's tablet"></div>
+        <div class="feedback bad" id="lk-msg" aria-live="polite"></div>
+        <button class="btn primary block" data-act="linkgo">Link this device</button></div>`, true);
+    },
+    loginemail: () => authAction(() => Sync.loginEmail($('#pl-email').value, $('#pl-pass').value, $('#pl-invite').value), '#pl-msg'),
+    signupemail: () => authAction(() => Sync.signupEmail($('#pl-email').value, $('#pl-pass').value, $('#pl-invite').value), '#pl-msg'),
+    logingoogle: () => authAction(() => Sync.loginGoogle($('#pl-invite').value), '#pl-msg'),
+    resetpw: () => authAction(async () => { await Sync.resetPassword($('#pl-email').value); return 'sent'; }, '#pl-msg'),
+    linkgo: () => authAction(() => Sync.link($('#lk-code').value, $('#lk-name').value), '#lk-msg'),
+    familyonly: () => { S.screen = 'familyonly'; render(); },
+    mkcode: d => Sync.createCode(d.r).catch(e => toast(h(Sync.friendly(e)))),
+    codedone: () => Sync.clearCode(),
+    unlinkdev: d => openSheet(`<div class="stack center"><h2>Unlink ${h(Sync.deviceName(d.id))}?</h2><p class="muted">It stops saving to your family. Everything it has already saved stays in your family.</p>
+      <button class="btn primary block" data-act="unlinkdevok" data-id="${h(d.id)}">Unlink</button><button class="btn ghost block" data-act="close">Cancel</button></div>`, true),
+    unlinkdevok: d => { closeSheet(); Sync.unlinkDevice(d.id).then(() => toast('Device unlinked'), e => toast(h(Sync.friendly(e)))); },
+    rmparent: d => openSheet(`<div class="stack center"><h2>Remove this parent?</h2><p class="muted">They will no longer see or change your family's progress.</p>
+      <button class="btn primary block" data-act="rmparentok" data-id="${h(d.id)}">Remove</button><button class="btn ghost block" data-act="close">Cancel</button></div>`, true),
+    rmparentok: d => { closeSheet(); Sync.removeParent(d.id).then(() => toast('Parent removed'), e => toast(h(Sync.friendly(e)))); },
+    signout: () => { Sync.signOut().then(() => { S.parentOk = false; toast('Signed out on this device'); render(); }); },
+    unlinkself: () => openSheet(`<div class="stack center"><h2>Unlink this device?</h2><p class="muted">Progress stops saving online. The players stay on this device, and everything already saved stays in your family.</p>
+      <button class="btn primary block" data-act="unlinkselfok">Unlink</button><button class="btn ghost block" data-act="close">Cancel</button></div>`, true),
+    unlinkselfok: () => { closeSheet(); Sync.unlinkSelf().then(() => { toast('This device is no longer linked'); render(); }, e => toast(h(Sync.friendly(e)))); },
+    dupyes: () => Sync.resolveDupe(true),
+    dupno: () => Sync.resolveDupe(false),
     delok: d => {
       state.deleted = Object.assign({}, state.deleted, { [d.id]: Date.now() });
       state.profiles = state.profiles.filter(q => q.id !== d.id);
@@ -27908,6 +28170,25 @@ const Sfx = (() => {
     },
     dbgcoins: () => { P().coins += 500; save(); render(); },
   };
+
+  // Runs a sign-in or link action from a sheet, showing progress and any error inside the sheet
+  async function authAction(fn, msgSel) {
+    const msg = $(msgSel);
+    document.querySelectorAll('.sheet .btn').forEach(b => { b.disabled = true; });
+    if (msg) { msg.className = 'feedback'; msg.textContent = 'Working…'; }
+    try {
+      const result = await fn();
+      if (result === 'sent') { msg.className = 'feedback good'; msg.textContent = 'Check your email for a link to choose a new password.'; return; }
+      closeSheet();
+      if (Sync.isParent) { S.tab = 'parent'; S.screen = state.profiles.length ? 'home' : 'familyonly'; toast('Signed in as a parent'); }
+      else if (Sync.isDevice) { S.screen = 'home'; S.tab = 'play'; toast('This device is now linked to your family'); }
+      render();
+    } catch (e) {
+      if (msg) { msg.className = 'feedback bad'; msg.textContent = Sync.friendly(e); }
+    } finally {
+      document.querySelectorAll('.sheet .btn').forEach(b => { b.disabled = false; });
+    }
+  }
 
   function importCode(text) {
     try {
