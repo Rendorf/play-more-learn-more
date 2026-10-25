@@ -17,7 +17,7 @@ A DopaDrill-style maths practice game for the Cambridge curriculum, Grades 1–9
   - `fx.js`: themes (Space, Ocean, Jungle, Candy), world backgrounds, particles, Web Audio sounds and music, and the mechanical key sound `Sfx.key`.
   - `board.js`: leaderboard nicknames, ISO weeks, active minutes, ranking (`Board`, pure).
   - `reminders.js`: reminder messages and when to send one (`PMLM_REMINDERS`, pure; also loaded by the sender).
-  - `online.js`: family-test extras over Firebase REST with its own anonymous sign-in (`Online`): stats events, feedback, leaderboard docs, push subscriptions, Home Screen install. Separate from `Sync`.
+  - `online.js`: family-test extras over Firebase REST with its own anonymous sign-in (`Online`): stats events, feedback, leaderboard docs, push subscriptions, invite links (`Online.invite`), Home Screen install. Separate from `Sync`.
   - `engine.js`: state and storage, rounds and mastery, wishes, parent area, family accounts (`Sync`), the Top tab, all screens.
   - `stats.html`: the owner's dashboard (build.py writes the root `stats.html`).
   - `shell.html`: markup and CSS. Each theme is a full token set on `:root[data-world=…]`. Every button is a "keycap" driven by `--face` / `--d`.
@@ -69,6 +69,12 @@ Run these from the repo root.
 - **Failed questions:** if a skill's questions can't be made on a device, the child sees "didn't load", and a note goes to `player.diag` (synced) with the user agent and `BUILD`, and a `problem` stats event.
 - **Family test extras (`Online`):** collections `events` and `feedback` (create only), `leaderboard/{pid}_{uid}` (owner writes; readers keep the newest doc per pid), `push/{uid}`, and `admins/{uid}` (written in the console; gates reading stats). Queue in `pmlm.q`. Off on localhost without `?emu=1`, in `#debug`/`#selftest` and in the artifact.
 - **Leaderboard and reminder fields** follow the lazy-defaults rule: `stats.active`, `week {id, pts, secs, q, mst}`, `board` ('nick' | 'name' | 'hidden') and `nickSeed` are only written by a played round or a grown-up's choice. Older versions keep them untouched; `tests/e2e/progress.spec.mjs` checks this.
+- **Invite a friend:**
+  - **Server records:** `invites/{code}` (6 characters, owned by the inviting device's `Online` account, one per player per device; the code is kept in `pmlm.inv`). `referred/{uid}` counts a new device for one invite only. `invites/{code}/friends/{uid}` holds the friend's `name`, `joined` and `played` (written by the friend) and `rewarded` (set once by the owner, after `played`).
+  - **Opening a link:** `?invite=` is read at boot and removed from the address bar. It only counts on a device with no players; the referral state lives in `pmlm.ref`.
+  - **Rewards:** the friend's first real round gives +50 (`INVITE_GIFT`). `collectInvites()` on the inviting device pays +100 (`INVITE_COINS`) per friend, up to 10 (`INVITE_MAX`), into `p.inviteRewards`.
+  - **Parents' view:** `p.friends` is a synced summary for parents.
+  - **Switches and stats:** `state.settings.invites === false` hides it. Stats events have `type: 'invite'` with `mode` share/open/join/play/reward.
 - **Preview copy:** `PMLM_ENV = 'preview'` switches every localStorage key to `pmlm-preview.` (it shares the rendorf.github.io origin with the live game).
 
 ## Conventions and gotchas
@@ -77,4 +83,5 @@ Run these from the repo root.
 - **Never test against the live family data.** Use the local preview (not signed in), the emulators (`?emu=1`) or the mock. Don't create accounts in the owner's Firebase project.
 - **Saved progress is sacred.** Never rename or drop fields in `pmlm.v1` or player docs, never change `STORE_KEY` or `v`; only add optional fields. Run `tests/run-all.sh` before every merge.
 - **Firebase rules changes** need the owner to republish them in the console. Say so whenever `firestore.rules` changes.
+- **Port 8766:** the browser tests reuse any server already on 8766, even one serving another checkout. If another worktree's server is there, the tests run against the wrong build: stop it, or run Playwright with a config on another port.
 - **Commit messages:** imperative subject line, then a short body explaining why.

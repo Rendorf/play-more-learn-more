@@ -1,10 +1,10 @@
-// Online extras for the family test: anonymous play stats, feedback, the leaderboard and daily reminders.
+// Online extras for the family test: anonymous play stats, feedback, the leaderboard, daily reminders and invites.
 // They use the Firestore and sign-in REST APIs of the same Firebase project as family accounts, with their own
 // anonymous account, so they never touch Sync's login. Nothing here blocks play: writes wait in a queue while
 // offline, and failures are quiet. Rules for every collection are in firestore.rules.
 const Online = (() => {
   const CFG = typeof PMLM_FIREBASE !== 'undefined' ? PMLM_FIREBASE : null;
-  const FEATURES = Object.assign({ stats: true, feedback: true, leaderboard: true, reminders: true }, typeof PMLM_FEATURES !== 'undefined' ? PMLM_FEATURES : null);
+  const FEATURES = Object.assign({ stats: true, feedback: true, leaderboard: true, reminders: true, invites: true }, typeof PMLM_FEATURES !== 'undefined' ? PMLM_FEATURES : null);
   const VAPID = typeof PMLM_VAPID !== 'undefined' ? PMLM_VAPID : '';
   const KEY = typeof PMLM_ENV !== 'undefined' && PMLM_ENV === 'preview' ? 'pmlm-preview.' : 'pmlm.';
   const params = new URLSearchParams(location.search), HASH = location.hash.replace('#', '');
@@ -236,15 +236,116 @@ const Online = (() => {
     },
   };
 
+  // ---------- Invite a friend ----------
+  // A child's link carries a random code made on their device (invites/{code}, owned by this device's account).
+  // A brand-new device that opens it is counted once (referred/{uid}), then reports when its child joins and
+  // finishes a first full round (invites/{code}/friends/{uid}). The inviting device marks each friend rewarded,
+  // which the rules allow only once, so the coins are paid once whichever device tries.
+  const INV_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  const STAGES = ['opened', 'joined', 'played'];
+  const refused = e => !!(e && e.status && e.status < 500 && e.status !== 401 && e.status !== 429);
+  const friendCache = {};
+  let refBusy = false, refAgain = false;
+  async function refSync() {
+    const r = get('ref');
+    if (!r || r.dead || !has('invites')) return;
+    if (refBusy) { refAgain = true; return; }
+    refBusy = true; refAgain = false;
+    let failed = false;
+    try {
+      const t = await idToken();
+      if (!r.sent.ref) {
+        await call('PATCH', 'referred/' + t.uid, { fields: encFields({ code: r.code, t: Date.now() }) }, '?currentDocument.exists=false');
+        r.sent.ref = true; put('ref', r);
+      }
+      const want = STAGES.indexOf(r.stage);
+      if (want > (r.sent.at == null ? -1 : r.sent.at)) {
+        const f = { t: r.t };
+        if (r.name) f.name = String(r.name).slice(0, 16);
+        if (r.joined) f.joined = r.joined;
+        if (r.played) f.played = r.played;
+        await call('PATCH', `invites/${r.code}/friends/${t.uid}`, { fields: encFields(f) }, '?' + Object.keys(f).map(k => 'updateMask.fieldPaths=' + k).join('&'));
+        r.sent.at = want; put('ref', r);
+      }
+    } catch (e) {
+      failed = true;
+      // A bad code, the child's own link or a device already counted: stop quietly. No network: try again later.
+      if (refused(e)) put('ref', Object.assign(get('ref') || r, { dead: true }));
+    } finally {
+      refBusy = false;
+      if (refAgain && !failed) refSync();
+    }
+  }
+  const invite = {
+    // This device's code for a player (null until the child first shares)
+    mine: pid => (get('inv') || {})[pid] || null,
+    async code(pid) {
+      if (!has('invites')) throw userError('Invites are switched off.');
+      const have = invite.mine(pid);
+      if (have) return have;
+      let t;
+      try { t = await idToken(); } catch (e) { throw userError('Connect to the internet to make your invite link.'); }
+      for (let attempt = 0; ; attempt++) {
+        const c = Array.from(crypto.getRandomValues(new Uint8Array(6)), b => INV_CHARS[b % INV_CHARS.length]).join('');
+        try {
+          await call('PATCH', 'invites/' + c, { fields: encFields({ owner: t.uid, pid, t: Date.now() }) }, '?currentDocument.exists=false');
+          put('inv', Object.assign(get('inv') || {}, { [pid]: c }));
+          return c;
+        } catch (e) {
+          // A clash with someone else's code is refused too, so try a few new codes before giving up
+          if (!e.status) throw userError('Connect to the internet to make your invite link.');
+          if (attempt >= 4) throw userError('Invites are not switched on yet. Ask a grown-up to check again later.');
+        }
+      }
+    },
+    // Who came through a code: [{ id, name, joined, played, rewarded, t }], at most one fetch a minute
+    async friends(code, force) {
+      const c = friendCache[code];
+      if (c && !force && Date.now() - c.at < 60000) return c.list;
+      const j = await call('GET', `invites/${code}/friends`, null, '?pageSize=100');
+      const list = (j.documents || []).map(d => Object.assign({ id: d.name.split('/').pop() }, decFields(d.fields)));
+      friendCache[code] = { list, at: Date.now() };
+      return list;
+    },
+    cached: code => (friendCache[code] || {}).list || null,
+    // Mark one friend's reward as paid: true only when the server accepted this very call
+    async collect(code, uid) {
+      try {
+        await call('PATCH', `invites/${code}/friends/${uid}`, { fields: encFields({ rewarded: Date.now() }) }, '?updateMask.fieldPaths=rewarded&currentDocument.exists=true');
+        return true;
+      } catch (e) { if (refused(e)) return false; throw e; }
+    },
+    // ---- On the invited device ----
+    land(code) {
+      if (!has('invites') || !/^[A-Z0-9]{6}$/.test(code)) return false;
+      const cur = get('ref');
+      if (cur && cur.code !== code) return false;   // this device already came through another invite
+      if (!cur) put('ref', { code, stage: 'opened', sent: {}, t: Date.now() });
+      if (!get('src')) put('src', 'invite');
+      refSync();
+      return true;
+    },
+    get ref() { const r = get('ref'); return r && !r.dead ? r : null; },
+    step(stage, data) {
+      const r = get('ref');
+      if (!r || r.dead) return;
+      if (STAGES.indexOf(stage) > STAGES.indexOf(r.stage)) r.stage = stage;
+      put('ref', Object.assign(r, data));
+      refSync();
+    },
+    gift() { const r = get('ref'); if (r) put('ref', Object.assign(r, { gift: true })); },
+  };
+
   return {
-    enabled, has, KEY, push, install, device, codec: { enc, dec, encFields, decFields },
+    enabled, has, KEY, push, install, device, invite, codec: { enc, dec, encFields, decFields },
     boot(opts) {
       build = opts.build || ''; onChange = opts.onChange || onChange;
       const src = (params.get('src') || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 24);
       if (src && !get('src')) put('src', src);
       if (!enabled) return;
-      addEventListener('online', () => { flushSoon(500); Object.values(pendingBoard).forEach(sendBoard); });
+      addEventListener('online', () => { flushSoon(500); Object.values(pendingBoard).forEach(sendBoard); refSync(); });
       flushSoon(3000);
+      setTimeout(refSync, 2000);
     },
     // True once a day per device (for the daily "open" event)
     firstToday() { const d = Board.dayOf(new Date()); if (get('opened') === d) return false; put('opened', d); return true; },
