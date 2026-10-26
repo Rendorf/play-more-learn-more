@@ -26,6 +26,7 @@ A DopaDrill-style maths practice game for the Cambridge curriculum, Grades 1–9
 - `firestore.rules`: the database security rules. **Not auto-deployed.** After changing them, the owner pastes the file into Firebase console → Firestore → Rules → Publish.
 - `tools/check-content.mjs`: content checker. `tools/rules-test/`: rules tests in the Firestore emulator. `tools/mock-firebase.js` and `tools/make-synctest.py`: an in-memory Firebase stand-in for testing family-account flows.
 - `tools/admin/`: owner tools with a service account: `send-reminders.mjs` (hourly via `.github/workflows/reminders.yml`), `backup-firestore.mjs`, `setup-push.mjs`. `tools/deploy-preview.sh` publishes the preview to `Rendorf/pmlm-preview`.
+- `docs/`: product, technology and design documentation (index in `docs/README.md`). Update the matching doc when a change alters behaviour, data or design; `docs/product/curriculum-map.md` is generated (`node tools/make-curriculum-map.mjs`).
 - `tests/`: `run-all.sh` runs every check (also in `.github/workflows/test.yml`); unit tests, Playwright browser tests (`tests/e2e/`) and saved progress from the live version (`tests/fixtures/`).
 
 ## Commands

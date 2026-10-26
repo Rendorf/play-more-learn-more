@@ -17,6 +17,10 @@ A free, playful maths practice game for the Cambridge curriculum, Grades 1–9 (
 
 The game is the single `index.html` file and plays the same without internet. The online parts are optional and use the game's Firebase project: family accounts, and for the friends-and-family test anonymous play stats, feedback, the leaderboard, reminders and invites (see [Family test extras](#family-test-extras)).
 
+## Documentation
+
+Product, technology and design documentation, for the team, new members, partners and schools, is in [`docs/`](docs/README.md).
+
 ## Editing the game
 
 `index.html` is generated, so edit the files in `src/` and rebuild it.
