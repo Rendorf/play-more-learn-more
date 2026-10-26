@@ -28,6 +28,7 @@ The whole game state, as JSON. `save()` writes it 250 ms after a change. In the 
     currency: string,          // money symbol, default '₼'
     keySound: string,          // 'clicky' etc.
     dailyGoal: 1 | 2 | 3,
+    musicVol?: 0-100,          // optional: background music volume on this device (default 50)
     stats?: bool,              // optional: false = no anonymous play stats from this device
     invites?: bool             // optional: false = children can't share invite links
   },
@@ -78,6 +79,7 @@ Optional fields, written only when something real happens:
 | `nickSeed` | the child taps 🎲 | number |
 | `friends` | the inviting device checks who came | `{ [friendUid]: { n: name, s: 'o' \| 'j' \| 'p' \| 'r', t } }` |
 | `inviteRewards` | the inviting device is paid for a friend | `{ [friendUid]: ms }` |
+| `music` | the child picks a music style in the Me tab | `'theme'` \| `'lofi'` \| `'calm'` \| `'adventure'` \| `'party'` |
 
 ### Grade and skill
 

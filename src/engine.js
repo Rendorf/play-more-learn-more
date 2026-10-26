@@ -1043,7 +1043,8 @@
     const p = P(), id = (p && p.theme) || 'space';
     document.documentElement.dataset.world = id;
     World.setTheme(id); FX.setTheme(id);
-    Sfx.setSfx(state.settings.sfx); Sfx.setMusic(state.settings.music); Sfx.setKeyStyle(state.settings.keySound || 'clicky');
+    Sfx.setSfx(state.settings.sfx); Sfx.setKeyStyle(state.settings.keySound || 'clicky');
+    Music.setWorld(id); Music.setStyle((p && p.music) || 'theme'); Music.setVolume(musicVol()); Music.setOn(state.settings.music !== false);
   }
 
   function render() {
@@ -1139,7 +1140,7 @@
         <div class="field"><label>Pick a world</label><div class="themes">${Object.entries(THEMES).map(([id, t]) => `<button class="themecard t-${id} ${d.theme === id ? 'on' : ''}" data-act="np" data-k="theme" data-v="${id}"><span class="te">${t.emoji}</span>${t.name}<small>${t.blurb}</small></button>`).join('')}</div></div>
         <button class="btn primary block" data-act="createplayer">Start playing</button>
       </div>`;
-    document.documentElement.dataset.world = d.theme; World.setTheme(d.theme);
+    document.documentElement.dataset.world = d.theme; World.setTheme(d.theme); Music.setWorld(d.theme);
   }
 
   // ----- Play tab -----
@@ -1290,7 +1291,7 @@
     box.querySelector('h2').textContent = title;
     box.querySelector('p').textContent = text;
     box.querySelector('button').outerHTML = '<button class="btn go block" data-act="close">Yay!</button>';
-    Sfx.fanfare(); FX.burst(r.left + r.width / 2, r.top + r.height / 3, 18, [e, '✨', '⭐']);
+    Music.duck(); Sfx.fanfare(); FX.burst(r.left + r.width / 2, r.top + r.height / 3, 18, [e, '✨', '⭐']);
   }
   function petSheet() {
     const kind = S.petKind || 'scales';
@@ -1404,8 +1405,8 @@
       answered0: p.stats.answered,
     };
     S.screen = 'round';
-    Sfx.unlock(); Sfx.setTier(0); World.setEnergy(0);
-    if (mode !== 'try' && mode !== 'place') Sfx.startMusic();
+    Sfx.unlock(); World.setEnergy(0);
+    Music.setScene(mode === 'boss' ? 'boss' : mode === 'try' || mode === 'place' ? 'menu' : 'round'); Music.setEnergy(0);
     nextQuestion();
   }
 
@@ -1589,7 +1590,7 @@
     R.results[R.i] = res;
     // feedback
     const tier = comboTier(R.combo);
-    Sfx.setTier(tier); World.setEnergy(tier); Sfx.correct(R.combo);
+    Music.setEnergy(tier); World.setEnergy(tier); Sfx.correct(R.combo);
     const card = $('#qcard'), rect = card.getBoundingClientRect();
     card.classList.add('right');
     FX.correct(R.combo, rect.left + rect.width / 2, rect.top + rect.height / 2);
@@ -1610,7 +1611,7 @@
   function onWrong() {
     const q = R.q, p = P();
     R.tries++; R.combo = 0;
-    Sfx.wrong(); Sfx.setTier(0); World.setEnergy(0);
+    Sfx.wrong(); Music.setEnergy(0); World.setEnergy(0);
     const card = $('#qcard'); card.classList.remove('wrong'); void card.offsetWidth; card.classList.add('wrong');
     const face = $('#mface'); face.classList.remove('jump'); void face.offsetWidth; face.classList.add('sad');
     const combo = $('#combo'); combo.textContent = '🔥 ×0'; combo.classList.remove('hot');
@@ -1675,7 +1676,7 @@
     if (R.ended) return;
     R.ended = true;
     clearTimeout(R.autoNext); if (R.timerId) clearInterval(R.timerId);
-    Sfx.stopMusic(); Sfx.setTier(0); World.setEnergy(0);
+    Music.setScene('menu'); World.setEnergy(0);
     const p = P(), gs = gradeState(p, R.grade);
     const answered = R.results.filter(Boolean).length, ok = R.results.filter(r => r === 'ok').length;
     const pct = answered ? Math.round(ok / answered * 100) : 0;
@@ -1761,7 +1762,7 @@
   function showCelebrations(items) {
     const showNext = () => {
       const it = items.shift(); if (!it) return;
-      Sfx.fanfare(); FX.party(); if (it.wish) setTimeout(() => Sfx.cheer(), 400);
+      Music.duck(); Sfx.fanfare(); FX.party(); if (it.wish) setTimeout(() => Sfx.cheer(), 400);
       const o = document.createElement('div');
       o.className = 'celebrate';
       o.innerHTML = `<div class="cbox"><div class="cemoji">${h(it.e)}</div><h2>${h(it.title)}</h2><div class="ctext">${h(it.text)}</div>${it.wish ? '<p style="color:#fff;font-weight:700">Show a grown-up! 🎉</p>' : ''}<button class="btn primary">Yay!</button></div>`;
@@ -1836,6 +1837,18 @@
   }
 
   // ----- Me tab -----
+  // ----- Background music (src/music.js): each child picks a style; on/off and volume belong to the device -----
+  const musicVol = () => (state.settings.musicVol == null ? 50 : state.settings.musicVol);
+  const MUSIC_BLURB = { theme: 'Your world\'s own song', lofi: 'Slow, warm and cozy', calm: 'Soft, for thinking', adventure: 'Brave drums, big tune', party: 'Dance, dance, dance!' };
+  function musicCard(p) {
+    const style = p.music || 'theme', w = THEMES[p.theme] ? p.theme : 'space', off = state.settings.music === false;
+    return `<div class="card stack" id="musiccard"><div class="row between"><h3>🎵 Music</h3><span class="muted" style="font-size:.85rem">${off ? 'Off' : '♪ ' + h(Music.title(style, w))}</span></div>
+      <div class="musicgrid">${Music.STYLES.map(x => `<button class="musictile ${style === x.id ? 'on' : ''}" data-act="musicstyle" data-v="${x.id}"><span class="mi">${x.id === 'theme' ? THEMES[w].emoji : x.icon}</span><b>${h(x.id === 'theme' ? Music.title('theme', w) : x.name)}</b><small>${MUSIC_BLURB[x.id]}</small></button>`).join('')}</div>
+      ${off ? '<p class="muted" style="font-size:.9rem">Music is switched off. A grown-up can turn it on in Parents → Settings.</p>'
+        : `<div class="volrow"><span>🔉 Volume</span><input type="range" class="vol" min="0" max="100" step="5" value="${musicVol()}" data-change="musicvol" aria-label="Music volume"></div>`}
+    </div>`;
+  }
+
   function renderMe() {
     const p = P(), lv = levelOf(p.brain), lo = levelAt(lv), hi = levelAt(lv + 1);
     collectInvites();
@@ -1856,6 +1869,7 @@
         <button class="btn" data-act="buyfreeze" ${freezesOf(p) >= FREEZE_MAX ? 'disabled' : ''}>${freezesOf(p) >= FREEZE_MAX ? `🧊 ${FREEZE_MAX}/${FREEZE_MAX} freezes` : `🧊 Freeze · ${FREEZE_COST} 🪙`}</button></div>
       ${inviteCard(p)}
       <div class="stack" style="gap:8px"><h3>World</h3><div class="themes">${Object.entries(THEMES).map(([id, t]) => `<button class="themecard t-${id} ${p.theme === id ? 'on' : ''}" data-act="theme" data-id="${id}"><span class="te">${t.emoji}</span>${t.name}<small>${t.blurb}</small></button>`).join('')}</div></div>
+      ${musicCard(p)}
       <div class="stack" style="gap:8px"><div class="row between"><h3>Avatar</h3><span class="chip">🪙 ${fmt(p.coins)}</span></div>
         <div class="avatars">${AVATARS.map(a => `<button class="avbtn ${p.avatar === a ? 'on' : ''}" data-act="avatar" data-v="${a}">${a}</button>`).join('')}
         ${SHOP_AVATARS.map(([a, c]) => { const own = p.owned.includes(a); return `<button class="avbtn ${p.avatar === a ? 'on' : ''} ${own ? '' : 'lockd'}" data-act="buy" data-v="${a}" data-c="${c}">${a}${own ? '' : `<span class="price">${c}🪙</span>`}</button>`; }).join('')}
@@ -2107,7 +2121,8 @@
         ${Online.has('stats') ? `<label class="toggle"><span>Share anonymous play stats <span class="muted" style="font-weight:400">(no names; it helps us improve the game)</span></span><input type="checkbox" data-change="set" data-k="stats" ${state.settings.stats !== false ? 'checked' : ''}></label>` : ''}
         ${Online.has('invites') ? `<label class="toggle"><span>Children can share invite links <span class="muted" style="font-weight:400">(friends who join show up by player name)</span></span><input type="checkbox" data-change="set" data-k="invites" ${state.settings.invites !== false ? 'checked' : ''}></label>` : ''}
         <label class="toggle">Sound effects <input type="checkbox" data-change="set" data-k="sfx" ${state.settings.sfx ? 'checked' : ''}></label>
-        <label class="toggle">Music during rounds <input type="checkbox" data-change="set" data-k="music" ${state.settings.music ? 'checked' : ''}></label>
+        <label class="toggle">Background music <input type="checkbox" data-change="set" data-k="music" ${state.settings.music !== false ? 'checked' : ''}></label>
+        <div class="volrow"><span>🔉 Music volume</span><input type="range" class="vol" min="0" max="100" step="5" value="${musicVol()}" data-change="musicvol" aria-label="Music volume"></div>
         <label class="toggle"><span>Speed bonus <span class="muted" style="font-weight:400">(a timer bar; fast answers earn extra brain power, nothing is lost)</span></span><input type="checkbox" data-change="set" data-k="timer" ${state.settings.timer ? 'checked' : ''}></label>
         <div class="field" style="margin-top:8px"><label for="dgoal">Daily goal <span class="muted" style="font-weight:400">(full rounds a day to keep the streak and open the chest; for the whole family)</span></label><select id="dgoal" data-change="dailygoal">${[1, 2, 3].map(n => sOpt(n, dailyGoal(), n === 1 ? '1 round a day' : n + ' rounds a day')).join('')}</select></div>
         <div class="field" style="margin-top:8px"><label for="keysound">Button sound <span class="muted" style="font-weight:400">(on this device)</span></label><select id="keysound" data-change="keysound">${[['clicky', 'Clicky: crisp mechanical keyboard'], ['thocky', 'Thocky: deep, soft keyboard'], ['off', 'Off']].map(([v, l]) => sOpt(v, state.settings.keySound || 'clicky', l)).join('')}</select></div>
@@ -2178,7 +2193,7 @@
   // ---------- Actions ----------
   const ACT = {
     tab: d => { S.tab = d.id; S.screen = 'home'; closeSheet(); render(); },
-    home: () => { closeSheet(); S.screen = 'home'; S.tab = 'play'; R = null; Sfx.stopMusic(); World.setEnergy(0); Sync.settle(); render(); },
+    home: () => { closeSheet(); S.screen = 'home'; S.tab = 'play'; R = null; Music.setScene('menu'); World.setEnergy(0); Sync.settle(); render(); },
     close: () => closeSheet(),
     mute: () => { const on = !(state.settings.sfx || state.settings.music); state.settings.sfx = on; state.settings.music = on; save(); render(); },
     players: () => openSheet(`<div class="stack"><div class="row between"><h2>Switch player</h2><button class="iconbtn" data-act="close" aria-label="Close">✕</button></div>
@@ -2194,11 +2209,18 @@
       const np = S.np, p = newProfile(name.slice(0, 16), np.avatar, np.grade, np.theme);
       state.profiles.push(p); state.current = p.id; S = { screen: 'home', tab: 'play' };
       save(); Sfx.unlock(); render();
-      setTimeout(() => { FX.burst(innerWidth / 2, innerHeight / 3, 20); Sfx.fanfare(); }, 200);
+      setTimeout(() => { FX.burst(innerWidth / 2, innerHeight / 3, 20); Music.duck(); Sfx.fanfare(); }, 200);
       stat('player', { g: p.grade }, p);
       const ref = invitesOn() && Online.invite.ref;
       if (ref && ref.stage === 'opened') { Online.invite.step('joined', { name: p.name, joined: Date.now() }); stat('invite', { mode: 'join' }, p); }
       if (state.profiles.length === 1 && !state.pin && !Sync.isParent) setTimeout(quickStart, 1400);
+    },
+    musicstyle: d => {
+      const p = P();
+      if (d.v !== (p.music || 'theme')) { p.music = d.v; save(); }
+      Music.start(); Music.setStyle(d.v);
+      if (state.settings.music === false) toast('Music is switched off. A grown-up can turn it on in Parents → Settings.');
+      refreshView();
     },
     invshare: () => inviteShare(true),
     invcopy: () => inviteShare(false),
@@ -2529,6 +2551,7 @@
     currency: (d, el) => { state.settings.currency = el.value; save(); },
     dailygoal: (d, el) => { state.settings.dailyGoal = +el.value; save(); S.keepScroll = true; render(); S.keepScroll = false; },
     wk: (d, el) => { S.wk = +el.value; S.keepScroll = true; render(); S.keepScroll = false; },
+    musicvol: (d, el) => { state.settings.musicVol = +el.value; save(); Music.setVolume(+el.value); },
     keysound: (d, el) => { state.settings.keySound = el.value; save(); applyTheme(); Sfx.key('key', 'down'); setTimeout(() => Sfx.key('key', 'up'), 90); },
     importfile: (d, el) => { const f = el.files && el.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => importCode(String(r.result)); r.readAsText(f); },
     lbgrade: (d, el) => { S.lb.grade = +el.value; refreshView(); },
@@ -2561,7 +2584,12 @@
     else if (e.key === 'Enter') { e.preventDefault(); press('ok'); }
     else if (e.key === 'Tab' || e.key === '/' || e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'ArrowRight' || e.key === 'ArrowLeft') { if (R.q.kind !== 'number') { e.preventDefault(); press('next'); } }
   });
-  document.addEventListener('pointerdown', () => Sfx.unlock(), { once: true });
+  // The first tap or key press lets the browser play sound: start the background music then
+  const firstTouch = () => { Sfx.unlock(); Music.start(); };
+  document.addEventListener('pointerdown', firstTouch, { once: true });
+  document.addEventListener('keydown', firstTouch, { once: true });
+  // Music volume follows the slider while it moves (the change event saves it)
+  document.addEventListener('input', e => { if (e.target.dataset && e.target.dataset.change === 'musicvol') Music.setVolume(+e.target.value); });
 
   // Mechanical key feel: the switch sound and the pressed-in look start the moment a finger or mouse goes
   // down on any button, and a lighter release tick plays when it comes up

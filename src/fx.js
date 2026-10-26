@@ -238,8 +238,7 @@ function comboTier(c) { return c >= 12 ? 4 : c >= 8 ? 3 : c >= 5 ? 2 : c >= 3 ? 
 
 // ---------- Synthesized sound ----------
 const Sfx = (() => {
-  let ac, master, sfxBus, musicBus, noiseBuf, sfxOn = true, musicOn = true;
-  let musicTimer = 0, nextNote = 0, step = 0, tier = 0, playing = false;
+  let ac, master, sfxBus, noiseBuf, sfxOn = true;
   const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
   const PENTA = [0, 2, 4, 7, 9];
 
@@ -250,7 +249,6 @@ const Sfx = (() => {
       ac = new AC();
       master = ac.createGain(); master.gain.value = 0.55; master.connect(ac.destination);
       sfxBus = ac.createGain(); sfxBus.connect(master);
-      musicBus = ac.createGain(); musicBus.gain.value = 0.16; musicBus.connect(master);
       noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
       const d = noiseBuf.getChannelData(0);
       for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
@@ -283,34 +281,11 @@ const Sfx = (() => {
   const ok = () => sfxOn && ensure();
   let keyStyle = 'clicky';
 
-  // Music: I–V–vi–IV loop, tempo and layers rise with the combo tier
-  const CHORDS = [[60, 64, 67], [55, 59, 62], [57, 60, 64], [53, 57, 60]];
-  function schedule() {
-    if (!playing || !ac) return;
-    const spb = 60 / (100 + tier * 12) / 2;
-    while (nextNote < ac.currentTime + 0.12) {
-      const bar = Math.floor(step / 8) % 4, s = step % 8, ch = CHORDS[bar], t0 = nextNote;
-      if (s % 4 === 0) tone(mtof(ch[0] - 24), t0, spb * 3.5, { type: 'triangle', vol: 0.35, bus: musicBus });
-      tone(mtof(ch[s % 3] + (s >= 4 ? 12 : 0)), t0, spb * 0.9, { type: 'triangle', vol: 0.12, bus: musicBus });
-      if (tier >= 1 && s % 2 === 1) noise(t0, 0.05, { vol: 0.08, bus: musicBus });
-      if (tier >= 2 && s % 4 === 0) tone(110, t0, 0.18, { type: 'sine', vol: 0.5, slide: 40, bus: musicBus });
-      if (tier >= 3 && s % 4 === 2) noise(t0, 0.12, { filter: 'bandpass', freq: 1800, vol: 0.12, bus: musicBus });
-      if (tier >= 4 && s % 2 === 0) tone(mtof(ch[(s / 2) % 3] + 24), t0, spb * 0.6, { type: 'square', vol: 0.04, bus: musicBus });
-      nextNote += spb; step++;
-    }
-  }
-
   return {
-    unlock() { if (sfxOn || musicOn) ensure(); },
+    unlock() { ensure(); },
+    // The shared audio clock and output, for the background music (src/music.js)
+    audio() { return ensure() ? { ac, master } : null; },
     setSfx(v) { sfxOn = v; },
-    setMusic(v) { musicOn = v; if (!v) this.stopMusic(); },
-    startMusic() {
-      if (!musicOn || playing || !ensure()) return;
-      playing = true; nextNote = ac.currentTime + 0.1; step = 0;
-      musicTimer = setInterval(schedule, 30);
-    },
-    stopMusic() { playing = false; clearInterval(musicTimer); musicTimer = 0; },
-    setTier(t) { tier = t; },
     setKeyStyle(s) { keyStyle = s || 'clicky'; },
     // A mechanical keyboard switch. style 'clicky' (blue switch: crisp click, metal tick and a short body "tock")
     // or 'thocky' (deep muted thock). kind 'big' | 'key' | 'small' makes big buttons a little deeper; phase 'down'

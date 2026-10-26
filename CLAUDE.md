@@ -14,7 +14,8 @@ A DopaDrill-style maths practice game for the Cambridge curriculum, Grades 1–9
   - `validate.js`: content checks shared by the checker and the in-game self-test.
   - `grade1.js` … `grade9.js`: lessons and question generators, 201 skills. The format is in `src/CONTRACT.md`.
   - `visuals.js`: rich-text markup and 26 SVG teaching pictures.
-  - `fx.js`: themes (Space, Ocean, Jungle, Candy), world backgrounds, particles, Web Audio sounds and music, and the mechanical key sound `Sfx.key`.
+  - `fx.js`: themes (Space, Ocean, Jungle, Candy), world backgrounds, particles, Web Audio sound effects (`Sfx`; `Sfx.audio()` shares the audio clock with the music), and the mechanical key sound `Sfx.key`.
+  - `music.js`: background music composed live with Web Audio (`Music`): a song per world and four moods, each played with the world's instruments. `compose()`/`bar()` are pure and unit-tested.
   - `board.js`: leaderboard nicknames, ISO weeks, active minutes, ranking (`Board`, pure).
   - `reminders.js`: reminder messages and when to send one (`PMLM_REMINDERS`, pure; also loaded by the sender).
   - `online.js`: family-test extras over Firebase REST with its own anonymous sign-in (`Online`): stats events, feedback, leaderboard docs, push subscriptions, invite links (`Online.invite`), Home Screen install. Separate from `Sync`.
@@ -70,6 +71,13 @@ Run these from the repo root.
 - **Failed questions:** if a skill's questions can't be made on a device, the child sees "didn't load", and a note goes to `player.diag` (synced) with the user agent and `BUILD`, and a `problem` stats event.
 - **Family test extras (`Online`):** collections `events` and `feedback` (create only), `leaderboard/{pid}_{uid}` (owner writes; readers keep the newest doc per pid), `push/{uid}`, and `admins/{uid}` (written in the console; gates reading stats). Queue in `pmlm.q`. Off on localhost without `?emu=1`, in `#debug`/`#selftest` and in the artifact.
 - **Leaderboard and reminder fields** follow the lazy-defaults rule: `stats.active`, `week {id, pts, secs, q, mst}`, `board` ('nick' | 'name' | 'hidden') and `nickSeed` are only written by a played round or a grown-up's choice. Older versions keep them untouched; `tests/e2e/progress.spec.mjs` checks this.
+- **Background music (`Music`):**
+  - **Styles:** a style (`theme` = the world's own song: Starhop, Island Hop, Vine Swing, Sugar Rush; or `lofi`, `calm`, `adventure`, `party`) is arranged for the current world. The world sets the key, the lead and chord instruments, the percussion and the ambience.
+  - **Playback:** it starts on the first tap or key press and plays everywhere at one level, continuously (re-renders never restart it). Changing world or style crossfades.
+  - **Scenes:** `setScene('round')` adds layers with the combo (`setEnergy`, 0–4), and `'boss'` starts at energy 2 with more drums.
+  - **Other behaviour:** celebrations `duck()` it for a moment. It pauses while the page is hidden.
+  - **Saved choices:** each child's pick is `p.music` (optional, written only when they pick). The device's `state.settings.music` is the on/off switch ("Background music" in Parents) and `musicVol` (0–100, default 50) the volume. Sliders are in the Me tab and in Parents.
+  - **Sound check:** `Music.render()` renders a song offline for the loudness check in `tests/e2e/music.spec.mjs`.
 - **Invite a friend:**
   - **Server records:** `invites/{code}` (6 characters, owned by the inviting device's `Online` account, one per player per device; the code is kept in `pmlm.inv`). `referred/{uid}` counts a new device for one invite only. `invites/{code}/friends/{uid}` holds the friend's `name`, `joined` and `played` (written by the friend) and `rewarded` (set once by the owner, after `played`).
   - **Opening a link:** `?invite=` is read at boot and removed from the address bar. It only counts on a device with no players; the referral state lives in `pmlm.ref`.

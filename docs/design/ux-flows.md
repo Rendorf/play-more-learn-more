@@ -24,7 +24,7 @@ Screens and copy are in `src/engine.js` (functions `render…` and the `ACT` act
 4. On the first player of a device with no PIN, the grown-up quick start opens after about 1.4 s (see [flow 5](#5-grown-up-quick-start-and-pin)).
 5. The Play tab shows: grade picker, today card (pet, week of streak days, rounds left today), the progress ring with the mascot and a suggested next skill, **🔧 Fix-it** and **🧭 Find my level**, the next wish, today's 3 quests and the map.
 6. **Placement is optional.** **🧭 Find my level** explains: "One question from every skill in Grade N. No hints this time. Skills you get right earn a star, so you can skip ahead." → **Start**.
-7. One question per skill at level 2. A wrong answer shows "The answer is …" and moves on after 1.8 s. No music, no hints.
+7. One question per skill at level 2. A wrong answer shows "The answer is …" and moves on after 1.8 s. No hints, and the music stays plain (no combo layers).
 8. Results: "Level found!" and "You already know X of Y skills. They now have a star, so you can jump ahead!"
 
 ```mermaid

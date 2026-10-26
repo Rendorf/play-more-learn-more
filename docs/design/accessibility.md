@@ -87,7 +87,7 @@ All controls pass WCAG 2.5.8 (24 px). Several are under the 44 px that Apple and
 ## Reduced motion and sound
 
 - `prefers-reduced-motion: reduce` makes all CSS animations and transitions near-instant and non-looping, freezes the world background on one frame, cuts particles to about a sixth, and turns off screen shake. See [worlds-and-motion.md](worlds-and-motion.md).
-- **Sound off:** 🔊 in the top bar mutes effects, music and key sounds together. Parents → Settings has separate switches for effects, music and button sound (Clicky, Thocky, Off).
+- **Sound off:** 🔊 in the top bar mutes effects, music and key sounds together. Parents → Settings has separate switches for effects and background music, a music volume, and the button sound (Clicky, Thocky, Off). Children can lower the music volume or pick Calm focus in the Me tab.
 - No sound plays before the first tap. No meaning is carried by sound alone: every sound has a visible change (ring colour, feedback text, health bar).
 
 ## Time limits
@@ -115,7 +115,7 @@ Ordered roughly by impact on children.
 | 10 | **Small targets.** Read aloud is 36 px; icon buttons and small buttons 40 px; text links are tiny. | Younger children, motor difficulties | Raise `.iconbtn`, the read-aloud button and `.btn.small` to 44 px; give `.link` at least 8 px of padding. |
 | 11 | **Grade picker and tabs miss roles.** `.gradepick` has `role="tablist"` but its buttons have no `role="tab"` or `aria-selected`; the bottom tabs have no `aria-current`. | Screen-reader users | Add `aria-pressed` (or `role="tab"` with `aria-selected`) to the grade buttons, and `aria-current="page"` to the active tab. |
 | 12 | **Emoji-only buttons in the shop and wishes** have no labels (hats, avatars). | Screen-reader users | Add `aria-label` such as "Crown hat, 100 coins, not owned yet". |
-| 13 | **Music ignores reduced motion.** Fast music at high combos can be overwhelming. | Children sensitive to sensory load | Consider starting with music off when reduced motion is on, or adding a "calm mode" that turns off music, shake and confetti together. |
+| 13 | **Music ignores reduced motion.** Busy music at high combos can be overwhelming. Calm focus (no drums, no combo layers) and the volume slider help, but nothing switches on by itself. | Children sensitive to sensory load | Consider picking Calm focus by default when reduced motion is on, or a "calm mode" that also turns off shake and confetti. |
 | 14 | **Fonts need the internet.** Offline, Atkinson Hyperlegible falls back to the system font. | Offline players | Ship the two fonts with the game (they are open-licensed), or accept the fallback. |
 
 ## How to check a change

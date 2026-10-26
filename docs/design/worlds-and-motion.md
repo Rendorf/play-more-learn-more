@@ -4,7 +4,7 @@
 
 **Last checked against:** BUILD 2026-10-25 18:32 UTC.
 
-All of this is in `src/fx.js`: `THEMES` (the four worlds), `World` (the animated background), `FX` (celebration particles) and `Sfx` (sound and music, made live with the Web Audio API; there are no audio files). The engine calls them from `src/engine.js`. Colours are in [design-system.md](design-system.md).
+All of this is in `src/fx.js`: `THEMES` (the four worlds), `World` (the animated background), `FX` (celebration particles) and `Sfx` (sound effects, made live with the Web Audio API; there are no audio files). The background music is its own module, `Music` in `src/music.js`, on the same audio clock. The engine calls them from `src/engine.js`. Colours are in [design-system.md](design-system.md).
 
 ## The four worlds
 
@@ -89,7 +89,7 @@ The big-moment cards come after the results screen, in this order: boss beaten, 
 
 ## Sound palette
 
-All sounds are synthesised. Sound effects and music each have their own volume bus (music is quieter, 0.16 of the effects level).
+All sounds are synthesised. The music has its own chain (a gentle filter, a small room reverb and a compressor) and its own volume, under the effects.
 
 | Sound | Made of | When it plays |
 |---|---|---|
@@ -118,20 +118,39 @@ Every button sounds like a real keyboard key. A grown-up picks the style under P
 
 ## Music
 
-Music plays only during real rounds (practice, boss, Fix-it, the 60-second challenge). It does not play in "Try it", "Find my level", lessons or menus.
+Background music (`src/music.js`) starts on the first tap and plays everywhere at one level: menus, lessons and rounds. Re-drawing a screen never restarts it, and it pauses while the page is hidden.
 
-- A four-chord loop (I–V–vi–IV in C) on soft triangle waves: a bass note each half-bar and an arpeggio.
-- Tempo starts at 100 BPM and adds 12 BPM per combo tier.
-- Layers join as the combo grows: tier 1 hi-hat, tier 2 kick drum, tier 3 snare, tier 4 a fast square-wave arpeggio.
-- A wrong answer drops back to tier 0; music stops at the end of the round or when leaving it.
+**Styles.** Each child picks a style in the Me tab, and it is played in the current world's key, with that world's instruments, percussion and ambience:
+
+| Style | Feel |
+|---|---|
+| World song (default) | Each world's own catchy song: Starhop (Space, synth-pop, 112 BPM), Island Hop (Ocean, calypso, 104), Vine Swing (Jungle, marimba and bongos, 108), Sugar Rush (Candy, bubblegum pop, 118) |
+| Lofi cozy | 78 BPM with a lazy swing, soft drums, jazzy seventh chords on electric piano, vinyl crackle and a slight tape wobble |
+| Calm focus | 66 BPM, no drums: slow pads, a few plucked notes and more room |
+| Adventure | 120 BPM, minor key, toms and a brass-like swell |
+| Party | 124 BPM, four-on-the-floor, offbeat hats and an octave bass |
+
+| World | Lead and chords | Percussion | Ambience |
+|---|---|---|---|
+| Space | Synth lead, plucked arpeggios, a soft pad | Kick, clap, hats | A high shimmer |
+| Ocean | Steel drum, marimba | Shakers, bongos | Waves |
+| Jungle | Marimba, kalimba | Log drum, toms, bongos | Birds |
+| Candy | Music box, bright plucks, a bouncy bass | Kick, clap, hats | Sparkles |
+
+**Form.** Songs are 32 bars (A A B A′) and loop seamlessly: the hook repeats, the last A lifts an octave, and the B section opens with a short breakdown.
+
+**In rounds.** Layers join as the combo grows (tier 1 extra hats, tier 2 an arpeggio and a steadier kick, tier 3 the tune doubled an octave up, tier 4 a crash and snare fills). A wrong answer drops back to tier 0. Boss battles start at tier 2 with extra drums. "Try it" and "Find my level" play the plain song.
+
+**Changes.** A new world or style crossfades in about half a second. Celebrations dip the music for a moment so their fanfare stands out.
 
 ## Mute and reduced motion
 
 | Control | What it does |
 |---|---|
 | 🔊 / 🔇 in the top bar | Turns sound effects **and** music off or on together. Key sounds go silent too. |
+| Me → 🎵 Music | The child's style and the music volume |
 | Parents → Settings → Sound effects | Effects only (key sounds follow this) |
-| Parents → Settings → Music during rounds | Music only |
+| Parents → Settings → Background music, Music volume | Music only (on this device) |
 | Parents → Settings → Button sound | Clicky, Thocky or Off |
 | Read aloud 🔊 | Only speaks when tapped; not affected by mute |
 | Browser audio unlock | No sound plays before the first tap anywhere (browsers require this) |
