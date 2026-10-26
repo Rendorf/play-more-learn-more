@@ -507,7 +507,7 @@ const PMLM_FIREBASE = {
 const PMLM_ENV = 'live';
 // Online extras for the family test (src/online.js). Set one to false to switch it off without a rollback.
 const PMLM_FEATURES = { stats: true, feedback: true, leaderboard: true, reminders: true, invites: true };
-// Public key for daily reminders (Web Push), written by tools/admin/setup-push.sh. Empty: reminders stay hidden.
+// Public key for daily reminders (Web Push), written by tools/admin/setup-push.mjs. Empty: reminders stay hidden.
 const PMLM_VAPID = 'BIzQyWxPqV1Cwj3PIbNEdwZyBNaF4RvJBa7qZxLoQMaMYcJlI2pNOy26ffZckF5GzjKDiG4D7YlIX9DB_-1A3A0';
 
 </script>
@@ -27192,7 +27192,7 @@ const Online = (() => {
   // The preview copy (build.py --preview) keeps its own storage, so it never reads or writes real progress
   const KEY = typeof PMLM_ENV !== 'undefined' && PMLM_ENV === 'preview' ? 'pmlm-preview.' : 'pmlm.';
   const STORE_KEY = KEY + 'v1';
-  const BUILD = '2026-10-25 18:32 UTC';   // replaced with the build time by build.py
+  const BUILD = '2026-10-26 08:49 UTC';   // replaced with the build time by build.py
 
   const AVATARS = ['🦊', '🐼', '🐯', '🐸', '🐧', '🦄', '🐨', '🐰'];
   const SHOP_AVATARS = [['🦁', 40], ['🦉', 40], ['🐙', 40], ['🦋', 40], ['🐳', 50], ['🦩', 50], ['🐲', 60], ['🦖', 60], ['👽', 80], ['🤖', 80], ['🐉', 120], ['🦄', 0]].filter(a => a[1] > 0);
@@ -29467,7 +29467,7 @@ const Online = (() => {
       openSheet(`<div class="stack"><div class="row between"><h2>Link to my family</h2><button class="iconbtn" data-act="close" aria-label="Close">✕</button></div>
         <p class="muted">A parent opens <b>Parents → Devices and parents → Link a child's device</b> on their own login and reads you the code.</p>
         <div class="field"><label for="lk-code">Code</label><input id="lk-code" autocomplete="off" autocapitalize="characters" placeholder="ABCD-EFGH" maxlength="12" style="font-family:var(--font-display);font-size:1.6rem;text-align:center;letter-spacing:.12em"></div>
-        <div class="field"><label for="lk-name">Whose device is this?</label><input id="lk-name" maxlength="30" value="${h(guess)}" placeholder="Ayan's tablet"></div>
+        <div class="field"><label for="lk-name">Whose device is this?</label><input id="lk-name" maxlength="30" value="${h(guess)}" placeholder="Kitchen tablet"></div>
         <div class="feedback bad" id="lk-msg" aria-live="polite"></div>
         <button class="btn primary block" data-act="linkgo">Link this device</button></div>`, true);
     },
