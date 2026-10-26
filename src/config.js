@@ -16,5 +16,5 @@ const PMLM_FIREBASE = {
 const PMLM_ENV = 'live';
 // Online extras for the family test (src/online.js). Set one to false to switch it off without a rollback.
 const PMLM_FEATURES = { stats: true, feedback: true, leaderboard: true, reminders: true, invites: true };
-// Public key for daily reminders (Web Push), written by tools/admin/setup-push.sh. Empty: reminders stay hidden.
+// Public key for daily reminders (Web Push), written by tools/admin/setup-push.mjs. Empty: reminders stay hidden.
 const PMLM_VAPID = 'BIzQyWxPqV1Cwj3PIbNEdwZyBNaF4RvJBa7qZxLoQMaMYcJlI2pNOy26ffZckF5GzjKDiG4D7YlIX9DB_-1A3A0';

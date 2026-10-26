@@ -5,7 +5,7 @@
 
 ## In plain words
 
-Play More Learn More is one web page. Everything a child needs (lessons, questions, pictures, sounds, progress) is inside that page, so it opens fast, works offline and runs on old tablets. There is no app store app and no server of our own.
+Play More Learn More is one web page. Everything a child needs (lessons, questions, pictures, sounds, progress) is inside that page, so it opens fast, keeps working without internet once open, and runs on old tablets. There is no app store app and no server of our own.
 
 - **GitHub Pages** hosts the page for free.
 - **Progress** is saved in the browser on each device.

@@ -13,9 +13,9 @@ A free, playful maths practice game for the Cambridge curriculum, Grades 1–9 (
 - 💌 Invite a friend: a child shares a link; when the friend finishes a first round, the friend gets 50 coins and the child 100 (for up to 10 friends)
 - 🔔 Optional daily reminders, Duolingo style: a motivating message on days nobody has played yet
 - A one-minute setup for grown-ups, Add to Home Screen help, and 🚩 on every question to report a problem
-- Works offline. Progress is saved in the browser on each device (use the backup code in the parent area to move it)
+- Keeps working without internet once it is open (the page isn't stored for offline use, so the first load needs a connection). Progress is saved in the browser on each device (use the backup code in the parent area to move it)
 
-The game is the single `index.html` file and plays the same without internet. The online parts are optional and use the game's Firebase project: family accounts, and for the friends-and-family test anonymous play stats, feedback, the leaderboard, reminders and invites (see [Family test extras](#family-test-extras)).
+The game is the single `index.html` file and, once open, plays the same without internet. The online parts are optional and use the game's Firebase project: family accounts, and for the friends-and-family test anonymous play stats, feedback, the leaderboard, reminders and invites (see [Family test extras](#family-test-extras)).
 
 ## Documentation
 
@@ -83,7 +83,7 @@ The web config is public by design. The rules make sure only a family's parents 
 
 ### Testing the rules
 
-`tools/rules-test` checks `firestore.rules` in Google's Firestore emulator (needs Java 11 or newer). Install once, start the emulator in one terminal, then run the tests in another:
+`tools/rules-test` checks `firestore.rules` in Google's Firestore emulator (needs Java 21, the version the tests and CI use). Install once, start the emulator in one terminal, then run the tests in another:
 
 ```bash
 cd tools/rules-test && npm install

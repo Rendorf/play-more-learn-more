@@ -2292,7 +2292,7 @@
       openSheet(`<div class="stack"><div class="row between"><h2>Link to my family</h2><button class="iconbtn" data-act="close" aria-label="Close">✕</button></div>
         <p class="muted">A parent opens <b>Parents → Devices and parents → Link a child's device</b> on their own login and reads you the code.</p>
         <div class="field"><label for="lk-code">Code</label><input id="lk-code" autocomplete="off" autocapitalize="characters" placeholder="ABCD-EFGH" maxlength="12" style="font-family:var(--font-display);font-size:1.6rem;text-align:center;letter-spacing:.12em"></div>
-        <div class="field"><label for="lk-name">Whose device is this?</label><input id="lk-name" maxlength="30" value="${h(guess)}" placeholder="Ayan's tablet"></div>
+        <div class="field"><label for="lk-name">Whose device is this?</label><input id="lk-name" maxlength="30" value="${h(guess)}" placeholder="Kitchen tablet"></div>
         <div class="feedback bad" id="lk-msg" aria-live="polite"></div>
         <button class="btn primary block" data-act="linkgo">Link this device</button></div>`, true);
     },
