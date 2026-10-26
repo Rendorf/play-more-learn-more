@@ -219,13 +219,14 @@ Family accounts are optional. Without one, progress stays on each device, and ba
   - **Progress:** mastered skills, minutes, questions, mistakes to fix, the 3 weakest skills, a full skill table and recent mistakes. A note appears if questions failed to load on that child's device.
   - **Players:** change grade, leaderboard name, delete, add, and combine "same child twice".
   - **Home Screen** install help and **Daily reminder**.
-  - **Settings:** share anonymous stats, allow invite links, sound effects, music, speed bonus, daily goal (1–3), button sound, money symbol (₼ $ £ € ₽ ₺ ₹).
+  - **Settings:** share anonymous stats, allow invite links, sound effects, background music and its volume, speed bonus, daily goal (1–3), button sound, money symbol (₼ $ £ € ₽ ₺ ₹).
   - **Feedback**, **About this test**, **Family account**, **Backup**, **Change PIN**, and **Reset** a child's progress for one grade.
 
 ## 19. Themes, sound and read-aloud
 
 - Four worlds: **Space** (mascot Blip 🤖), **Ocean** (Coral 🐙), **Jungle** (Mango 🐵) and **Candy** (Gummy 🧸). Each changes colours, background, map and bosses. Each child picks their own.
-- Sound effects and music during rounds can be switched off. Button sounds: clicky, thocky or off.
+- Sound effects and background music can be switched off, and the music volume changed. Button sounds: clicky, thocky or off.
+- **Background music** plays everywhere: each world has its own song, and each child can pick Lofi cozy, Calm focus, Adventure or Party in the Me tab (played with that world's instruments).
 - **Read-aloud** (🔊) on every lesson card and question uses the device's built-in voice in British English, slowed a little. It shows only when the browser supports speech.
 
 ## 20. Offline, saving and backups

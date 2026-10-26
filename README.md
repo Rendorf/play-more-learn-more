@@ -9,6 +9,7 @@ A free, playful maths practice game for the Cambridge curriculum, Grades 1–9 (
 - Four worlds to choose from: Space, Ocean, Jungle and Candy
 - A parent area behind a PIN: set wishes that unlock at 25%, 50%, 75% and 100% of a grade, see a progress report, and change settings
 - Read-aloud button for younger players
+- 🎵 Background music made by the game itself: each world has its own song, and children can switch to Lofi cozy, Calm focus, Adventure or Party (played with that world's instruments). It builds up with a combo, and has a volume control and an off switch
 - 🏅 A leaderboard with fun nicknames: points, active minutes, skills mastered, streak, questions and first-try %, this week or all time, by grade
 - 💌 Invite a friend: a child shares a link; when the friend finishes a first round, the friend gets 50 coins and the child 100 (for up to 10 friends)
 - 🔔 Optional daily reminders, Duolingo style: a motivating message on days nobody has played yet
@@ -30,7 +31,8 @@ Product, technology and design documentation, for the team, new members, partner
 | `src/grade1.js` … `src/grade9.js` | Lessons and question generators for each Cambridge stage |
 | `src/CONTRACT.md` | The format for skills, questions, text markup and pictures |
 | `src/engine.js` | Screens, rounds, mastery, wishes and the parent area |
-| `src/fx.js` | Themes, backgrounds, celebration effects and sound |
+| `src/fx.js` | Themes, backgrounds, celebration effects and sound effects |
+| `src/music.js` | Background music, composed live with Web Audio: songs, moods, instruments and the player |
 | `src/visuals.js` | The SVG teaching pictures |
 | `src/shell.html` | Page markup and styles |
 | `src/config.js` | Firebase settings, feature switches (`PMLM_FEATURES`) and the reminder public key |

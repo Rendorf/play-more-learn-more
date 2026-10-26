@@ -208,6 +208,16 @@ nav.tabs[hidden], header.top[hidden] { display: none !important; }
 .sticker.got::after { content: ""; position: absolute; inset: -40%; background: linear-gradient(115deg, transparent 42%, rgba(255,255,255,.35) 50%, transparent 58%); animation: shine 4.5s ease-in-out infinite; pointer-events: none; }
 @keyframes shine { 0%,60% { transform: translateX(-70%) } 100% { transform: translateX(70%) } }
 
+/* Background music */
+.musicgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.musictile { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 8px; align-items: center; text-align: left; padding: 10px 12px; border: 0; border-radius: 16px; --face: var(--panel2); --d: 4px; color: var(--ink); }
+.musictile .mi { grid-row: 1 / 3; font-size: 1.6rem; line-height: 1; }
+.musictile b { font-family: var(--font-display); font-size: .95rem; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.musictile small { font-size: .72rem; font-weight: 700; color: var(--muted); line-height: 1.2; }
+.musictile.on { --face: #5a4310; --face: color-mix(in srgb, var(--accent) 26%, var(--panel2)); }
+.volrow { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center; font-weight: 700; padding: 6px 0; }
+input.vol { width: 100%; min-height: 32px; accent-color: var(--accent); }
+
 /* Invite a friend */
 .invrow { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 14px; background: var(--panel2); }
 .invrow .ii { font-size: 1.3rem; text-align: center; }
@@ -411,7 +421,7 @@ sup, sub { font-size: .65em; }
 /* Keycaps: every pressable control has a lit face in its own colour (--face), a darker side --d deep and a soft
    shadow. Pressing (:active, or .pressed set on pointerdown for instant touch feedback) sinks it onto its side;
    selected toggles (current tab, grade, avatar...) sit pressed in. Plain selector lists keep older tablets working. */
-.btn, .k, .choice, .iconbtn, .tab, .seg button, .gradepick button, .avbtn, .themecard, .famcard, .chip.player, .chip.streak, .pet, .node {
+.btn, .k, .choice, .iconbtn, .tab, .seg button, .gradepick button, .avbtn, .themecard, .famcard, .musictile, .chip.player, .chip.streak, .pet, .node {
   --side: color-mix(in srgb, var(--face, var(--panel2)) 62%, var(--sidemix));
   --cap: inset 0 2px 0 rgba(255, 255, 255, .3), inset 0 -3px 0 rgba(0, 0, 0, .15), 0 var(--d, 5px) 0 var(--side), 0 calc(var(--d, 5px) + 7px) 14px -7px var(--amb);
   --cap-down: inset 0 2px 0 rgba(255, 255, 255, .14), inset 0 -1px 0 rgba(0, 0, 0, .12), 0 1px 0 var(--side), 0 3px 6px -4px var(--amb);
@@ -427,15 +437,15 @@ sup, sub { font-size: .65em; }
 /* number keys: a dished top like a real keyboard key */
 .k { background-image: radial-gradient(ellipse 70% 55% at 50% 40%, rgba(255, 255, 255, .13), transparent 70%), linear-gradient(180deg, color-mix(in srgb, var(--face) 86%, #fff), var(--face) 52%, color-mix(in srgb, var(--face) 90%, #000)); }
 @media (hover: hover) {
-  .btn:hover, .k:hover, .choice:hover, .iconbtn:hover, .tab:hover, .seg button:hover, .gradepick button:hover, .avbtn:hover, .themecard:hover, .famcard:hover, .chip.player:hover, .chip.streak:hover, .pet:hover, .node:hover { --lift: -1px; }
+  .btn:hover, .k:hover, .choice:hover, .iconbtn:hover, .tab:hover, .seg button:hover, .gradepick button:hover, .avbtn:hover, .themecard:hover, .famcard:hover, .musictile:hover, .chip.player:hover, .chip.streak:hover, .pet:hover, .node:hover { --lift: -1px; }
 }
-.btn:active, .k:active, .choice:active, .iconbtn:active, .tab:active, .seg button:active, .gradepick button:active, .avbtn:active, .themecard:active, .famcard:active, .chip.player:active, .chip.streak:active, .pet:active, .node:active,
-.btn.pressed, .k.pressed, .choice.pressed, .iconbtn.pressed, .tab.pressed, .seg button.pressed, .gradepick button.pressed, .avbtn.pressed, .themecard.pressed, .famcard.pressed, .chip.player.pressed, .chip.streak.pressed, .pet.pressed, .node.pressed,
+.btn:active, .k:active, .choice:active, .iconbtn:active, .tab:active, .seg button:active, .gradepick button:active, .avbtn:active, .themecard:active, .famcard:active, .musictile:active, .chip.player:active, .chip.streak:active, .pet:active, .node:active,
+.btn.pressed, .k.pressed, .choice.pressed, .iconbtn.pressed, .tab.pressed, .seg button.pressed, .gradepick button.pressed, .avbtn.pressed, .themecard.pressed, .famcard.pressed, .musictile.pressed, .chip.player.pressed, .chip.streak.pressed, .pet.pressed, .node.pressed,
 .tab.on, .seg button.on, .gradepick button.on, .choice[disabled] {
   --lift: calc(var(--d, 5px) - 1px);
   box-shadow: var(--cap-down);
 }
-.avbtn.on, .famcard.on { --lift: calc(var(--d, 5px) - 1px); box-shadow: var(--cap-down), inset 0 0 0 3px var(--accent); }
+.avbtn.on, .famcard.on, .musictile.on { --lift: calc(var(--d, 5px) - 1px); box-shadow: var(--cap-down), inset 0 0 0 3px var(--accent); }
 .btn[disabled], .k[disabled], .avbtn[disabled], .seg button[disabled], .gradepick button[disabled] { --lift: 0px; box-shadow: none; filter: grayscale(.8) opacity(.5); }
 .node.current { box-shadow: var(--cap), inset 0 0 0 4px var(--go), 0 0 0 8px color-mix(in srgb, var(--go) 30%, transparent); animation: nodepulse 1.8s infinite; }
 .node.current:active, .node.current.pressed { box-shadow: var(--cap-down), inset 0 0 0 4px var(--go); }

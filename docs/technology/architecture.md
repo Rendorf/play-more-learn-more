@@ -36,7 +36,7 @@ flowchart LR
   build -- "--check" --> chk["fails if index.html,<br>stats.html or manifest<br>are stale"]
 ```
 
-- Scripts are inlined in a fixed order: `config.js`, `util.js`, `registry.js`, `validate.js`, `grade1.js` … `grade9.js`, `visuals.js`, `fx.js`, `board.js`, `reminders.js`, `online.js`, `engine.js`.
+- Scripts are inlined in a fixed order: `config.js`, `util.js`, `registry.js`, `validate.js`, `grade1.js` … `grade9.js`, `visuals.js`, `fx.js`, `music.js`, `board.js`, `reminders.js`, `online.js`, `engine.js`.
 - `__BUILD__` is replaced with the build time (for example `2026-10-25 18:32 UTC`). Parents see it in the Parents area, and each linked device reports it.
 - `--preview` builds from `config.preview.js`, adds a red PREVIEW ribbon and names the Home Screen app "PMLM Preview".
 - `--check` ignores the build time. The tests run it.
@@ -54,7 +54,8 @@ flowchart TD
   validate["validate.js<br>PMLM_VALIDATE"]
   grades["grade1.js … grade9.js<br>201 skills"]
   visuals["visuals.js<br>Rich text + SVG pictures"]
-  fx["fx.js<br>themes, worlds, Sfx, music"]
+  fx["fx.js<br>themes, worlds, Sfx"]
+  music["music.js<br>Music (songs, player)"]
   board["board.js<br>Board (pure)"]
   rem["reminders.js<br>PMLM_REMINDERS (pure)"]
   online["online.js<br>Online (REST)"]
@@ -67,6 +68,8 @@ flowchart TD
   engine --> validate
   engine --> visuals
   engine --> fx
+  engine --> music
+  music --> fx
   engine --> board
   engine --> rem
   engine --> online
