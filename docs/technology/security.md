@@ -28,7 +28,8 @@ The game has no server of its own. All protection of online data comes from Fire
 
 ### Family-test extras
 
-- `events` and `feedback`: create only, with an exact list of allowed keys, allowed `type` / `kind` values and size limits. Only admins read them.
+- `events` and `feedback`: create only, with an exact list of allowed keys, allowed `type` / `kind` values and size limits. Only admins read them. Bug reports (`kind: 'bug'`) add the game's diagnostics: what went wrong, the screen, the last taps (action names, never typed text), a saving-status summary and the error message. They contain no names.
+- `families/{fid}/devices/{uid}.player` (the device lock): only a parent of that family can set or clear it, and only that field. The device can't change it itself.
 - `leaderboard/{pid}_{uid}`: any signed-in account reads; only the owning account writes its own documents, with checked keys and ranges.
 - `push/{uid}`: only that account (and admins) read; only that account writes, with an `https://` endpoint and a short `kids` list.
 - `invites`, `friends`, `referred`: only the owner of an invite reads it and its friends. A device is counted for one invite only, never its own. The owner can set `rewarded` once, only after `played`, so coins are paid once whichever device asks.

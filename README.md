@@ -111,6 +111,7 @@ While friends and families try the game, these help us learn what works. Each ca
   - The friend's device then gives a 50-coin welcome gift. The inviting device pays 100 coins by setting `rewarded`, which the rules allow only once, for up to 10 friends.
   - Only the inviting device can read who came. Parents see a summary in the family card, synced with the child.
   - Grown-ups can switch it off under Parents → Settings. The funnel is on `stats.html`.
+- **Bug reports:** 🐞 Report a problem (Me tab and Parents), and a pop-up when something breaks. Each report carries the game version, device, screen, the last taps and the family-saving status, with no names. They are listed on `stats.html`.
 - **Stats dashboard:** `stats.html` on the live site. Sign in with Google. The first time it shows your account id: add a document with that id to an `admins` collection in the Firebase console (any field, for example `ok: true`) and reload.
 
 ### Daily reminders

@@ -5,6 +5,10 @@
   const rt = s => Rich.html(s);
   const h = s => esc(s == null ? '' : s);
   const fmt = x => U.fmt(Math.round(x));
+  const ago = t => {
+    const m = Math.round((Date.now() - t) / 60000), n = (x, w) => `${x} ${w}${x > 1 ? 's' : ''} ago`;
+    return m < 1 ? 'just now' : m < 60 ? n(m, 'minute') : m < 1440 ? n(Math.round(m / 60), 'hour') : n(Math.round(m / 1440), 'day');
+  };
   const HASH = location.hash.replace('#', '');
   const DEBUG = HASH === 'debug' || /[?&]debug=1/.test(location.search);
   const SELFTEST = HASH === 'selftest' || /[?&]selftest=1/.test(location.search);
@@ -162,7 +166,9 @@
   // Parents log in with email/password or Google; a child's device joins with a one-time link code and an
   // anonymous sign-in. Each player is its own document (families/{fid}/players/{id}) so two children playing
   // at once never overwrite each other; the PIN, money symbol, player order and deletions live on
-  // families/{fid}. Newer updatedAt wins. Which player is active stays per device.
+  // families/{fid}. The copy with more progress wins (PMLM_MERGE), then the newer. Which player is active stays
+  // per device. Every read and write has a timeout: if the live connection is stuck, this page switches to the same
+  // documents over plain HTTPS (REST mode), so saving can never stop without anyone noticing.
   const Sync = (() => {
     const CFG = typeof PMLM_FIREBASE !== 'undefined' ? PMLM_FIREBASE : null;
     const enabled = !!CFG && !IN_ARTIFACT;
@@ -172,6 +178,71 @@
     let fb = null, db = null, user = null, fid = null, role = null, me = {}, status = 'off', loading = null, flow = false, lastError = null;
     let unsubs = [], devices = [], parents = [], code = null, dupes = [];
     let known = {}, knownShared = '', dirty = new Set(), dirtyShared = false, timer = 0, writing = false, pendingRemote = {};
+    let rest = false, stalls = 0, pollTimer = 0, unsavedSince = 0;
+    // ?emu=1: the local Auth and Firestore emulators (tests)
+    const EMU = /[?&]emu=1/.test(location.search) && !!CFG && CFG.projectId !== 'mock', PROJECT = EMU ? 'demo-pmlm' : CFG && CFG.projectId;
+    const SAVED = KEY + 'synced';
+    const savedInfo = () => { try { return JSON.parse(localStorage.getItem(SAVED)) || {}; } catch (e) { return {}; } };
+    // No answer, or the SDK says it can't reach the server: both mean the live connection is stuck
+    const stuckErr = e => !!e && /^(timeout|unavailable|deadline-exceeded)$/.test(e.code);
+    const withTimeout = (p, ms = 15000) => new Promise((res, rej) => {
+      const t = setTimeout(() => rej(Object.assign(new Error('No answer from the family database'), { code: 'timeout' })), ms);
+      Promise.resolve(p).then(v => { clearTimeout(t); res(v); }, e => { clearTimeout(t); rej(e); });
+    });
+    // ---- REST mode: the same documents over plain HTTPS with this account's sign-in (the rules still apply) ----
+    async function restCall(method, path, body, query = '') {
+      const tok = await withTimeout(fb.auth().currentUser.getIdToken(), 12000);
+      const base = `${EMU ? 'http://127.0.0.1:8080' : 'https://firestore.googleapis.com'}/v1/projects/${PROJECT}/databases/(default)/documents`;
+      const r = await withTimeout(fetch(`${base}/${path}${query}`, { method, headers: Object.assign({ Authorization: 'Bearer ' + tok }, body ? { 'Content-Type': 'application/json' } : {}), body: body ? JSON.stringify(body) : undefined }), 15000);
+      if (r.status === 404 && method === 'GET') return null;
+      if (!r.ok) throw Object.assign(new Error(`${method} ${path.split('/').slice(0, 3).join('/')}: ${r.status}`), { code: r.status === 403 ? 'permission-denied' : 'rest-' + r.status });
+      return r.json();
+    }
+    const fields = d => (d && d.fields ? Online.codec.decFields(d.fields) : null);
+    async function readDoc(path) {
+      if (!rest) { const snap = await withTimeout(db.doc(path).get()); return snap.exists ? snap.data() : null; }
+      return fields(await restCall('GET', path));
+    }
+    async function readCol(path) {
+      if (!rest) return (await withTimeout(db.collection(path).get())).docs.map(d => Object.assign({ _id: d.id }, d.data()));
+      const j = await restCall('GET', path, null, '?pageSize=300');
+      return ((j && j.documents) || []).map(d => Object.assign({ _id: d.name.split('/').pop() }, fields(d)));
+    }
+    async function writeDoc(path, data, merge) {
+      if (!rest) return withTimeout(merge ? db.doc(path).set(data, { merge: true }) : db.doc(path).set(data));
+      const mask = merge ? '?' + Object.keys(data).map(k => 'updateMask.fieldPaths=' + encodeURIComponent(k)).join('&') : '';
+      return restCall('PATCH', path, { fields: Online.codec.encFields(data) }, mask);
+    }
+    const removeDoc = path => (rest ? restCall('DELETE', path) : withTimeout(db.doc(path).delete()));
+    // Two answers missing in a row: stop waiting for the live connection and save over plain HTTPS instead
+    function stalled() {
+      if (rest || !CFG || CFG.projectId === 'mock' || ++stalls < 2) return;
+      rest = true; stopListening();
+      if (fid) { poll(); writeDoc(`families/${fid}/devices/${user.uid}`, { lastSeen: Date.now(), version: BUILD }, true).catch(() => {}); }
+    }
+    // In REST mode, look for other devices' changes every 20 seconds while the game is on screen
+    function poll() {
+      clearTimeout(pollTimer);
+      if (!rest || !fid) return;
+      pollTimer = setTimeout(async () => {
+        if (!document.hidden) {
+          try {
+            const [famDoc, players, mine] = await Promise.all([readDoc(`families/${fid}`), readCol(`families/${fid}/players`), role === 'device' ? readDoc(`families/${fid}/devices/${user.uid}`) : null]);
+            let changed = false;
+            for (const d of players) { try { changed = applyProfile(JSON.parse(d.data)) || changed; } catch (e) { /* skip a bad document */ } }
+            if (famDoc && famDoc.shared && applyShared(famDoc)) changed = true;
+            if (mine) gotDevice(mine);
+            if (changed) afterRemote();
+            if (dirty.size || dirtyShared) flush();
+          } catch (e) { if (e.code === 'permission-denied') return unlinked(); lastError = e; }
+        }
+        poll();
+      }, 20000);
+    }
+    function markSaved() {
+      unsavedSince = dirty.size || dirtyShared ? unsavedSince : 0;
+      try { localStorage.setItem(SAVED, JSON.stringify({ t: Date.now(), rest })); } catch (e) { /* storage blocked */ }
+    }
 
     const strip = p => { const { updatedAt, ...rest } = p; return JSON.stringify(rest); };
     const sharedOf = () => JSON.stringify({ pin: state.pin, currency: state.settings.currency, timer: state.settings.timer, goal: state.settings.dailyGoal || 1, team: state.team || null, order: state.profiles.map(p => p.id), deleted: state.deleted || {} });
@@ -191,9 +262,11 @@
       off: 'Not connected', loading: 'Connecting…', synced: 'All changes saved online ✓', saving: 'Saving…',
       offline: 'Offline. Changes will upload when the internet is back.',
       error: 'Could not reach the family database. Changes are kept on this device and will retry.',
+      stuck: 'Not saving to your family right now. Progress is safe on this device and the game keeps trying.',
       unlinked: 'This device was unlinked from the family. Its players are still on this device.',
+      relink: 'This device lost its family sign-in, so it isn\'t saving online. Its players are safe here: ask a grown-up for a link code and link it again.',
     };
-    const ICONS = { synced: '☁️', saving: '⏳', loading: '⏳', offline: '📴', error: '⚠️' };
+    const ICONS = { synced: '☁️', saving: '⏳', loading: '⏳', offline: '📴', error: '⚠️', stuck: '⚠️', relink: '⚠️' };
     const WRONG_LOGIN = 'That email or password is not right.';
     const MESSAGES = {
       'auth/invalid-credential': WRONG_LOGIN, 'auth/invalid-login-credentials': WRONG_LOGIN, 'auth/wrong-password': WRONG_LOGIN, 'auth/user-not-found': WRONG_LOGIN,
@@ -237,8 +310,9 @@
       if (!loading) loading = (async () => {
         if (!window.firebase) for (const f of ['app', 'auth', 'firestore']) await loadScript(`${SDK}firebase-${f}-compat.js`);
         fb = window.firebase;
-        if (!fb.apps.length) fb.initializeApp(CFG);
+        if (!fb.apps.length) fb.initializeApp(EMU ? Object.assign({}, CFG, { projectId: PROJECT }) : CFG);
         db = fb.firestore();
+        if (EMU && !ensureSdk.emu) { ensureSdk.emu = true; fb.auth().useEmulator('http://127.0.0.1:9099', { disableWarnings: true }); db.useEmulator('127.0.0.1', 8080); }
         fb.auth().onAuthStateChanged(u => { if (!flow && (!u || !user || u.uid !== user.uid)) onUser(u); });
         return fb;
       })().catch(e => { loading = null; throw e; });
@@ -258,6 +332,7 @@
         const j = strip(p);
         if (known[p.id] !== j) { known[p.id] = j; p.updatedAt = now; dirty.add(p.id); }
       }
+      if (dirty.size && !unsavedSince) unsavedSince = now;
       const sj = sharedOf();
       if (sj !== knownShared) { knownShared = sj; state.sharedAt = now; dirtyShared = true; }
       if (fid && (dirty.size || dirtyShared)) { clearTimeout(timer); timer = setTimeout(flush, 1500); }
@@ -270,29 +345,51 @@
       try {
         for (const id of ids) {
           const p = state.profiles.find(x => x.id === id);
-          if (p && !held.has(id)) await fam().collection('players').doc(id).set({ data: JSON.stringify(p), updatedAt: p.updatedAt || Date.now() });
+          if (p && !held.has(id)) await writeDoc(`families/${fid}/players/${id}`, { data: JSON.stringify(p), updatedAt: p.updatedAt || Date.now() });
         }
         if (shared) {
-          await fam().set({ shared: knownShared, updatedAt: state.sharedAt || Date.now() }, { merge: true });
-          for (const id of Object.keys(state.deleted || {})) await fam().collection('players').doc(id).delete();
+          await writeDoc(`families/${fid}`, { shared: knownShared, updatedAt: state.sharedAt || Date.now() }, true);
+          for (const id of Object.keys(state.deleted || {})) await removeDoc(`families/${fid}/players/${id}`);
         }
+        stalls = 0; lastError = null; markSaved();
         setStatus(navigator.onLine === false ? 'offline' : 'synced');
       } catch (e) {
         ids.forEach(id => dirty.add(id)); if (shared) dirtyShared = true;
         if (e && e.code === 'permission-denied') { writing = false; return unlinked(); }
-        setStatus(navigator.onLine === false ? 'offline' : 'error');
-        clearTimeout(timer); timer = setTimeout(flush, 15000);
+        lastError = e;
+        if (stuckErr(e)) stalled();
+        setStatus(navigator.onLine === false ? 'offline' : 'stuck');
+        if (unsavedSince && Date.now() - unsavedSince > 3 * 60000) Diag.problem('sync', 'Not saving to the family: ' + (e && (e.code || e.message)));
+        clearTimeout(timer); timer = setTimeout(flush, rest ? 5000 : 15000);
       }
       writing = false;
       if (fid && (dirty.size || dirtyShared)) { clearTimeout(timer); timer = setTimeout(flush, 1500); }
     }
 
+    // A copy of a player from the family database. The one with more progress wins, then the newer; a grown-up's
+    // edits from the other copy are kept. When this device's copy wins, it is uploaded so the others catch up.
     function applyProfile(p) {
       if (!p || !p.id || (state.deleted || {})[p.id]) return false;
       const i = state.profiles.findIndex(x => x.id === p.id);
-      if (i >= 0 && (state.profiles[i].updatedAt || 0) >= (p.updatedAt || 0)) return false;
-      if (i >= 0 && S.screen === 'round' && state.current === p.id) { pendingRemote[p.id] = p; return false; }
-      if (i >= 0) state.profiles[i] = p; else state.profiles.push(p);
+      if (i >= 0) {
+        const local = state.profiles[i], c = PMLM_MERGE.compare(local, p);
+        if (c === 0) return false;
+        if (c > 0) {
+          const edited = PMLM_MERGE.edits(local, p);
+          // Newer than the server's copy, so that versions which still keep the newest copy take this one too
+          if ((p.updatedAt || 0) >= (local.updatedAt || 0)) local.updatedAt = (p.updatedAt || 0) + 1;
+          if (edited) known[local.id] = strip(local);
+          dirty.add(local.id);
+          if (fid) { clearTimeout(timer); timer = setTimeout(flush, 1500); }
+          return edited;
+        }
+        if (S.screen === 'round' && state.current === p.id) { pendingRemote[p.id] = p; return false; }
+        const edited = PMLM_MERGE.edits(p, local);
+        state.profiles[i] = p;
+        known[p.id] = edited ? '' : strip(p);   // our newer grown-up edits go back up with the next save
+        return true;
+      }
+      state.profiles.push(p);
       known[p.id] = strip(p);
       return true;
     }
@@ -327,7 +424,7 @@
     async function unlinked() {
       stopListening();
       if (user && db) db.collection('users').doc(user.uid).delete().catch(() => {});
-      fid = null; role = null; me = {}; flag(false);
+      fid = null; role = null; me = {}; flag(false); state.lock = null;
       setStatus('unlinked'); toast(LABELS.unlinked); rerender();
     }
 
@@ -335,15 +432,18 @@
     async function onUser(u) {
       stopListening();
       user = u; fid = null; role = null; me = {}; lastError = null;
-      if (!u) { flag(false); setStatus('off'); return rerender(); }
+      // No sign-in on a device that was linked: never switch saving off quietly. Keep the link and say so.
+      if (!u) { let was = null; try { was = localStorage.getItem(FLAG); } catch (e) { /* storage blocked */ } setStatus(was ? 'relink' : 'off'); return rerender(); }
       setStatus('loading');
       try {
-        const ud = await db.collection('users').doc(u.uid).get();
-        if (ud.exists && ud.data().fid) {
-          fid = ud.data().fid; role = ud.data().role;
-          const mem = await fam().collection(role === 'parent' ? 'parents' : 'devices').doc(u.uid).get();
-          if (!mem.exists) return unlinked();
-          me = mem.data();
+        let ud;
+        try { ud = await readDoc(`users/${u.uid}`); } catch (e) { if (!stuckErr(e)) throw e; stalls = 1; stalled(); ud = await readDoc(`users/${u.uid}`); }
+        if (ud && ud.fid) {
+          fid = ud.fid; role = ud.role;
+          const mem = await readDoc(`families/${fid}/${role === 'parent' ? 'parents' : 'devices'}/${u.uid}`);
+          if (!mem) return unlinked();
+          me = mem;
+          if (role === 'device') gotDevice(mem);
         } else if (!u.isAnonymous) {
           await createFamily(u);
         } else { setStatus('off'); return rerender(); }
@@ -364,7 +464,7 @@
       b.set(db.collection('families').doc(fid), { createdBy: u.uid, shared: sharedOf(), updatedAt: Date.now() }, { merge: true });
       b.set(fam().collection('parents').doc(u.uid), me);
       b.set(db.collection('users').doc(u.uid), { fid, role });
-      await b.commit();
+      await withTimeout(b.commit(), 20000);
     }
     async function join(j) {
       const snap = await db.collection('codes').doc(j.code).get();
@@ -377,7 +477,7 @@
       const b = db.batch();
       b.set(fam().collection(j.role === 'device' ? 'devices' : 'parents').doc(user.uid), me);
       b.set(db.collection('users').doc(user.uid), { fid, role });
-      try { await b.commit(); }
+      try { await withTimeout(b.commit(), 20000); }
       catch (e) {
         fid = null; role = null;
         throw e && e.code === 'permission-denied' ? userError('That code no longer works. It has probably expired (codes last 30 minutes). Ask for a new one.') : e;
@@ -396,13 +496,15 @@
 
     async function startSync() {
       setStatus('loading');
-      const [famDoc, players] = await Promise.all([fam().get(), fam().collection('players').get()]);
+      const both = () => Promise.all([readDoc(`families/${fid}`), readCol(`families/${fid}/players`)]);
+      let famDoc, players;
+      try { [famDoc, players] = await both(); } catch (e) { if (!stuckErr(e) || rest) throw e; stalls = 1; stalled(); [famDoc, players] = await both(); }
       const remoteAt = {}, remote = [];
-      players.forEach(doc => {
-        const d = doc.data(); remoteAt[doc.id] = d.updatedAt || 0;
+      players.forEach(d => {
+        remoteAt[d._id] = d.updatedAt || 0;
         try { const p = JSON.parse(d.data); remote.push(p); applyProfile(p); } catch (e) { /* skip a bad document */ }
       });
-      if (famDoc.exists && famDoc.data().shared) applyShared(famDoc.data(), true);
+      if (famDoc && famDoc.shared) applyShared(famDoc, true);
       // The same child on this device and in the family? Ask before uploading this copy.
       const key = p => p.name.trim().toLowerCase() + '|' + p.grade;
       const byKey = new Map(remote.map(p => [key(p), p]));
@@ -410,14 +512,23 @@
       dirty = new Set();
       for (const p of state.profiles) if (!(p.id in remoteAt) || (p.updatedAt || 0) > remoteAt[p.id]) dirty.add(p.id);
       knownShared = sharedOf();
-      dirtyShared = !famDoc.exists || famDoc.data().shared !== knownShared;
+      dirtyShared = !famDoc || famDoc.shared !== knownShared;
       if (dirtyShared) state.sharedAt = Date.now();
       afterRemote();
-      listen();
-      if (role === 'device') fam().collection('devices').doc(user.uid).update({ lastSeen: Date.now(), version: BUILD, ua: navigator.userAgent.slice(0, 200) }).catch(() => {});
+      if (rest) poll(); else listen();
+      if (role === 'device') writeDoc(`families/${fid}/devices/${user.uid}`, { lastSeen: Date.now(), version: BUILD, ua: navigator.userAgent.slice(0, 200) }, true).catch(() => {});
       setStatus('synced');
-      if (dirty.size || dirtyShared) flush();
+      if (dirty.size || dirtyShared) flush(); else markSaved();
       if (dupes.length) setTimeout(askDupe, 700);
+    }
+    // This device's own record: a parent can lock it to one child from their phone (player)
+    function gotDevice(d) {
+      me = Object.assign({}, me, d);
+      const lock = d.player || null;
+      if ((state.lock || null) === lock) return;
+      state.lock = lock;
+      if (lock && state.profiles.some(p => p.id === lock)) state.current = lock;
+      save(); rerender();
     }
     function listen() {
       const failed = e => (e && e.code === 'permission-denied' ? unlinked() : setStatus('error'));
@@ -433,6 +544,7 @@
         if (!doc.exists || doc.metadata.hasPendingWrites || !doc.data().shared) return;
         if (applyShared(doc.data())) afterRemote();
       }, failed));
+      if (role === 'device') unsubs.push(fam().collection('devices').doc(user.uid).onSnapshot(d => { if (d.exists) gotDevice(d.data()); }, () => {}));
       if (role !== 'parent') return;
       unsubs.push(fam().collection('devices').onSnapshot(s => {
         devices = s.docs.map(d => Object.assign({ id: d.id }, d.data()));
@@ -519,12 +631,46 @@
         } catch (e) { fid = null; role = null; throw e; }
         finally { flow = false; }
       },
-      async signOut() { stopListening(); fid = null; role = null; code = null; if (fb) await fb.auth().signOut(); },
+      async signOut() { stopListening(); fid = null; role = null; code = null; flag(false); if (fb) await fb.auth().signOut(); },
+      // A one-line health summary for bug reports (no names)
+      health() {
+        const si = savedInfo(), mins = t => Math.round((Date.now() - t) / 60000) + 'm';
+        return [`status=${status}`, `role=${role || 'none'}`, `mode=${rest ? 'rest' : 'live'}`, `sdk=${fb ? 'loaded' : 'no'}`,
+          `auth=${user ? (user.isAnonymous ? 'device' : 'parent') : 'none'}`, `saved=${si.t ? mins(si.t) + ' ago' : 'never'}`,
+          `pending=${dirty.size}${dirtyShared ? '+shared' : ''}`, `unsaved=${unsavedSince ? mins(unsavedSince) : '0'}`, `online=${navigator.onLine !== false}`,
+          `lock=${me.player ? 'yes' : 'no'}`, `clock=${new Date().toISOString().slice(0, 16)}Z tz=${-new Date().getTimezoneOffset()}`, `err=${lastError ? String(lastError.code || '') + ' ' + String(lastError.message || '').slice(0, 120) : '-'}`].join(' ');
+      },
+      get lastSaved() { return savedInfo().t || 0; },
+      get label() { return LABELS[status] || ''; },
+      get rest() { return rest; },
+      get stuck() { return !!fid && !!unsavedSince && Date.now() - unsavedSince > 3 * 60000; },
+      // Bring the family's copies and this device's in line now: whichever has more progress is kept and uploaded
+      async saveNow() {
+        if (!fid) throw userError(status === 'relink' ? LABELS.relink : 'This device isn\'t linked to a family yet.');
+        setStatus('saving');
+        let players;
+        try { players = await readCol(`families/${fid}/players`); } catch (e) { if (!stuckErr(e) || rest) { setStatus('stuck'); lastError = e; throw e; } stalls = 1; stalled(); players = await readCol(`families/${fid}/players`); }
+        const there = new Set();
+        for (const d of players) { there.add(d._id); try { applyProfile(JSON.parse(d.data)); } catch (e) { /* skip a bad document */ } }
+        for (const p of state.profiles) if (!there.has(p.id)) dirty.add(p.id);
+        if (dirty.size || dirtyShared) await flush(); else { markSaved(); setStatus('synced'); }
+        rerender();
+        if (status !== 'synced') throw lastError || userError('Not saved yet. The game keeps trying.');
+      },
+      // A parent locks a child's device to one player (pid), or unlocks it (null)
+      async setDevicePlayer(id, pid) {
+        if (role !== 'parent') return;
+        const path = `families/${fid}/devices/${id}`;
+        if (rest) await restCall('PATCH', path, pid ? { fields: Online.codec.encFields({ player: pid }) } : { fields: {} }, '?updateMask.fieldPaths=player');
+        else await withTimeout(db.doc(path).update({ player: pid || fb.firestore.FieldValue.delete() }));
+        const d = devices.find(x => x.id === id); if (d) { if (pid) d.player = pid; else delete d.player; }
+        rerender();
+      },
       async unlinkSelf() {
         if (!fid || role !== 'device') return;
         await fam().collection('devices').doc(user.uid).delete();
         await db.collection('users').doc(user.uid).delete();
-        stopListening(); fid = null; role = null; me = {}; flag(false); setStatus('off');
+        stopListening(); fid = null; role = null; me = {}; flag(false); state.lock = null; setStatus('off');
       },
       async createCode(kind) {
         if (role !== 'parent') return;
@@ -572,17 +718,23 @@
         const ps = Object.values(pendingRemote); pendingRemote = {};
         if (ps.map(applyProfile).some(Boolean)) save();
       },
-      chip() { return fid ? `<span class="chip" id="syncchip" title="Family account">${ICONS[status] || '☁️'}</span>` : ''; },
+      chip() {
+        const warn = this.stuck || status === 'relink';
+        if (!fid && !warn) return '';
+        return `<button class="chip syncchip ${warn ? 'warn' : ''}" id="syncchip" data-act="syncinfo" title="Family account" aria-label="Family saving: ${h(LABELS[status] || '')}">${warn ? '⚠️' : ICONS[status] || '☁️'}</button>`;
+      },
       // Family account card for children's devices and not-yet-connected devices (Parents tab)
       card() {
         if (IN_ARTIFACT) return '';
         if (!enabled) return `<div class="card stack"><h3>☁️ Family account</h3><p class="muted" style="font-size:.9rem">Online saving isn't set up for this copy of the game, so progress stays on this device.</p></div>`;
         if (role === 'device') return `<div class="card stack"><h3>☁️ Family account</h3>
           <p style="font-size:.95rem">Linked to your family as <b>${h(me.name || 'this device')}</b>. Progress saves online by itself, and parents can see it from their own login.</p>
-          <p class="muted" id="syncstatus" style="font-size:.9rem">${LABELS[status]}</p>
-          <button class="btn small ghost" data-act="unlinkself">Unlink this device</button></div>`;
+          ${me.player && state.profiles.some(p => p.id === me.player) ? `<p style="font-size:.95rem">🔒 A parent set this device to play as <b>${h(state.profiles.find(p => p.id === me.player).name)}</b>.</p>` : ''}
+          <p class="${this.stuck ? 'warntext' : 'muted'}" id="syncstatus" style="font-size:.9rem">${LABELS[status]}</p>
+          <p class="muted" style="font-size:.9rem">Last saved online: <b>${this.lastSaved ? ago(this.lastSaved) : 'not yet on this device'}</b>${rest ? ' · using the backup connection' : ''}</p>
+          <div class="row"><button class="btn small" data-act="syncnow">🔄 Save now</button><button class="btn small ghost" data-act="unlinkself">Unlink this device</button></div></div>`;
         return `<div class="card stack"><h3>☁️ Family account</h3>
-          <p style="font-size:.95rem">${status === 'unlinked' ? h(LABELS.unlinked) + ' ' : ''}Link this device to your family so progress is saved online, or log in as a parent to see every child's progress.</p>
+          <p style="font-size:.95rem" class="${status === 'relink' ? 'warntext' : ''}">${status === 'unlinked' ? h(LABELS.unlinked) + ' ' : status === 'relink' ? h(LABELS.relink) + ' ' : ''}Link this device to your family so progress is saved online, or log in as a parent to see every child's progress.</p>
           <div class="grid2"><button class="btn primary" data-act="linkopen">Link to my family</button><button class="btn" data-act="loginopen">Parent login</button></div></div>`;
       },
       // Devices and parents card for a logged-in parent
@@ -595,11 +747,13 @@
           <button class="btn small ghost" data-act="codedone">Cancel this code</button>`;
         return `<div class="card stack"><h3>🔗 Devices and parents</h3>
           <p class="muted" style="font-size:.9rem">Signed in as <b>${h((user && user.email) || 'parent')}</b>. Children's devices linked to your family save their progress here by themselves.</p>
-          <p class="muted" id="syncstatus" style="font-size:.9rem">${LABELS[status]}</p>
+          <p class="${this.stuck ? 'warntext' : 'muted'}" id="syncstatus" style="font-size:.9rem">${LABELS[status]}</p>
+          <p class="muted" style="font-size:.9rem">This phone last saved online: <b>${this.lastSaved ? ago(this.lastSaved) : 'not yet'}</b>${rest ? ' · using the backup connection' : ''} <button class="link" data-act="syncnow">Save now</button></p>
           ${codeBox}
           ${code ? '' : `<div class="grid2"><button class="btn primary" data-act="mkcode" data-r="device">Link a child's device</button><button class="btn" data-act="mkcode" data-r="parent">Invite another parent</button></div>`}
           <span class="eyebrow">Linked devices · ${devices.length}</span>
-          ${devices.length ? devices.map(d => `<div class="row between"><span>📱 <b>${h(d.name)}</b> <span class="muted">· last seen ${day(d.lastSeen)} · ${h(deviceKind(d.ua))} · ${d.version ? (d.version === BUILD ? 'up to date' : 'version ' + h(d.version) + ', reload it') : 'old version, reload it'}</span></span><button class="btn small ghost" data-act="unlinkdev" data-id="${h(d.id)}">Unlink</button></div>`).join('') : '<p class="muted" style="font-size:.9rem">No devices linked yet.</p>'}
+          ${devices.length ? devices.map(d => `<div class="devrow"><div class="row between"><span>📱 <b>${h(d.name)}</b> <span class="muted">· last seen ${day(d.lastSeen)}${d.lastSeen && Date.now() - d.lastSeen > 2 * 864e5 ? ' ⚠️' : ''} · ${h(deviceKind(d.ua))} · ${d.version ? (d.version === BUILD ? 'up to date' : 'version ' + h(d.version) + ', reload it') : 'old version, reload it'}</span></span><button class="btn small ghost" data-act="unlinkdev" data-id="${h(d.id)}">Unlink</button></div>
+            <select class="devlock" aria-label="Who plays on ${h(d.name)}" data-change="devplayer" data-id="${h(d.id)}">${[['', '🔓 Plays as: anyone (can switch)']].concat(state.profiles.map(p => [p.id, `🔒 Plays as: ${p.avatar} ${p.name}`])).map(([v, l]) => `<option value="${h(v)}" ${(d.player || '') === v ? 'selected' : ''}>${h(l)}</option>`).join('')}</select></div>`).join('') : '<p class="muted" style="font-size:.9rem">No devices linked yet.</p>'}
           <span class="eyebrow">Parents · ${parents.length}</span>
           ${parents.map(p => `<div class="row between"><span>👤 ${h(p.email || 'Parent')}${user && p.id === user.uid ? ' <span class="muted">(you)</span>' : ''}</span>${user && p.id === user.uid ? '' : `<button class="btn small ghost" data-act="rmparent" data-id="${h(p.id)}">Remove</button>`}</div>`).join('')}
           <button class="btn small ghost" data-act="signout">Sign out on this device</button></div>`;
@@ -741,6 +895,69 @@
     return { av: p.avatar, str: liveStreak(p), frz: freezesOf(p), last: p.streak.last || '', wish: w ? Math.max(0, w.at - peekPct(p, p.grade)) : -1 };
   });
   const refreshView = () => { S.keepScroll = true; render(); S.keepScroll = false; };
+
+  // ---------- Device lock: a parent picks, from their phone, which child a device is for (Sync.gotDevice) ----------
+  // The PIN unlocks it until the game is closed.
+  let unlocked = false;
+  const lockedTo = () => (state.lock && !unlocked && state.profiles.some(p => p.id === state.lock) ? state.lock : null);
+
+  // ---------- Problems and bug reports ----------
+  // Diag keeps the last taps (action names only, never typed text) and errors, so a report shows what led up to it.
+  // problem() offers a report once per kind of problem per session, and never in the middle of a round.
+  const Diag = (() => {
+    const taps = [], errors = [], seen = new Set();
+    let pending = null;
+    const keep = (list, x, n) => { list.push(x); if (list.length > n) list.shift(); };
+    return {
+      tap: act => keep(taps, `${Math.round(performance.now() / 1000)}s ${act}`, 25),
+      error: (msg, where) => keep(errors, `${where ? where + ': ' : ''}${String(msg).slice(0, 300)}`, 6),
+      log: () => taps.join(', ') + (errors.length ? ' | errors: ' + errors.join(' / ') : ''),
+      lastError: () => errors[errors.length - 1] || '',
+      problem(kind, msg) {
+        if (seen.has(kind) || !Online.has('feedback')) return;
+        seen.add(kind); pending = { kind, msg: String(msg || '').slice(0, 1000) };
+        setTimeout(offerReport, 300);
+      },
+      take() { const p = pending; pending = null; return p; },
+      get waiting() { return !!pending; },
+    };
+  })();
+  // Network hiccups are normal on phones and tablets: they go in the log but don't pop up
+  const noisy = m => /Failed to fetch|NetworkError|Load failed|network|offline|unavailable|ResizeObserver|Script error|timeout|No answer/i.test(m || '');
+  window.addEventListener('error', e => {
+    const m = (e && e.message) || 'error';
+    Diag.error(`${m} @${String((e && e.filename) || '').split('/').pop()}:${(e && e.lineno) || 0}`);
+    if (!noisy(m)) Diag.problem('error:' + m, m + (e.error && e.error.stack ? '\n' + e.error.stack : ''));
+  });
+  window.addEventListener('unhandledrejection', e => {
+    const r = e && e.reason, m = String((r && (r.message || r.code)) || r);
+    Diag.error(m, 'promise');
+    if (!noisy(m)) Diag.problem('promise:' + m, m + (r && r.stack ? '\n' + r.stack : ''));
+  });
+  function offerReport() {
+    if (!Diag.waiting || S.screen === 'round' || S.screen === 'lesson' || S.screen === 'new' || document.querySelector('.overlay, .celebrate')) return;
+    const p = Diag.take();
+    reportSheet(p.kind === 'sync' ? 'points' : 'stuck', p);
+  }
+  const BUG_KINDS = [['points', '📉', 'Points or progress look wrong'], ['stuck', '🧊', 'The game got stuck'], ['sound', '🔇', 'Sound or music'], ['other', '🤔', 'Something else']];
+  function reportSheet(what, auto) {
+    S.bug = { what, msg: auto ? auto.msg : '' };
+    const why = !auto ? 'What went wrong?' : (auto.kind === 'sync' ? 'Your progress isn\'t saving to your family right now. It\'s safe on this device.' : 'Something in the game didn\'t work.') + ' Tell us what happened? It helps us fix it.';
+    openSheet(`<div class="stack"><div class="row between"><h2>${auto ? '😬 Oops! Something went wrong' : '🐞 Report a problem'}</h2><button class="iconbtn" data-act="close" aria-label="Close">✕</button></div>
+      <p class="muted">${why}</p>
+      <div class="bugkinds">${BUG_KINDS.map(([id, e, label]) => `<button class="bugkind ${what === id ? 'on' : ''}" data-act="bugkind" data-v="${id}"><span>${e}</span>${label}</button>`).join('')}</div>
+      <div class="field"><label for="bugtext">Tell us more <span class="muted" style="font-weight:400">(optional)</span></label><textarea id="bugtext" class="prose" maxlength="500" placeholder="What were you doing?"></textarea></div>
+      <p class="muted" style="font-size:.82rem">We'll also send the game version, device, screen and saving status. No names.</p>
+      ${auto && auto.kind === 'sync' ? '<button class="btn block" data-act="syncnow">🔄 Try saving again</button>' : ''}
+      <button class="btn primary block" data-act="bugsend">Send report</button><button class="btn ghost block" data-act="close">Not now</button></div>`, true);
+  }
+  // A child who has played on a device that isn't saving to the family: their newest leaderboard entry is ahead
+  function notSaving(x) {
+    const c = Sync.isParent && Online.has('leaderboard') && Online.boardCache;
+    if (!c) return null;
+    const mine = c.docs.filter(d => d.pid === x.id && !d.hid).sort((a, b) => (b.t || 0) - (a.t || 0))[0];
+    return mine && (mine.pts || 0) > Math.round(x.brain || 0) + 50 && (mine.t || 0) > (x.updatedAt || 0) + 10 * 60000 ? mine : null;
+  }
 
   // ---------- Invite a friend (the server side is Online.invite in src/online.js) ----------
   // A friend who opens a child's link, makes a player and finishes a first full round gets a welcome gift; the
@@ -1053,6 +1270,9 @@
     if (S.screen === 'familyonly' && Sync.isParent) return renderFamilyOnly();
     // A parent's own phone may have no player of its own: show the first child so the dashboard opens
     if (!P() && Sync.isParent && state.profiles.length) state.current = state.profiles[0].id;
+    const lk = lockedTo();
+    if (lk && state.current !== lk) state.current = lk;
+    setTimeout(offerReport, 700);
     const p = P();
     if (!p) return state.profiles.length ? renderPlayers() : renderWelcome();
     if (S.screen === 'lesson') return renderLesson();
@@ -1361,6 +1581,8 @@
     if (!p) return;
     const msg = String((e && (e.stack || e.message)) || e).slice(0, 500);
     console.warn('Question failed', skill, level, e);
+    Diag.error(msg, 'question ' + skill);
+    Diag.problem('question', `A question in ${skill} (level ${level}) could not be made: ${msg}`);
     p.diag = (p.diag || []).slice(-9).concat([{ t: Date.now(), skill, level, msg, ua: navigator.userAgent.slice(0, 200), v: BUILD }]);
     stat('problem', { g: (R && R.grade) || p.grade, sk: skill, n: level, msg }, p);
   }
@@ -1878,6 +2100,7 @@
         ${HATS.map(([a, c]) => { const own = p.owned.includes(a); return `<button class="avbtn ${p.hat === a ? 'on' : ''} ${own ? '' : 'lockd'}" data-act="buy" data-v="${a}" data-c="${c}" data-hat="1">${a}${own ? '' : `<span class="price">${c}🪙</span>`}</button>`; }).join('')}
         ${SPECIAL_HATS.map(([a, label, msg]) => (p.owned.includes(a) ? `<button class="avbtn ${p.hat === a ? 'on' : ''}" data-act="hat" data-v="${a}">${a}</button>` : lockd(a, label, msg))).join('')}</div></div>
       <div class="stack" style="gap:8px"><h3>Trophies · ${Object.keys(p.trophies).length}/${TROPHIES.length}</h3><div class="trophies">${TROPHIES.map(t => `<div class="trophy ${p.trophies[t.id] ? 'got' : ''}"><span class="tt">${t.icon}</span>${h(t.name)}</div>`).join('')}</div></div>
+      ${Online.has('feedback') ? '<button class="btn ghost block" data-act="bugopen">🐞 Report a problem</button>' : ''}
     </div>`;
   }
 
@@ -1947,7 +2170,7 @@
       <p class="muted" style="font-size:.9rem">What do the children enjoy? What is confusing or broken? Every message is read.</p>
       <div class="field"><label for="fbtext">Your message</label><textarea id="fbtext" class="prose" maxlength="1000"></textarea></div>
       <div class="field"><label for="fbname">Your name <span class="muted" style="font-weight:400">(optional, so we can thank you)</span></label><input id="fbname" maxlength="40" autocomplete="name"></div>
-      <button class="btn small primary" data-act="sendfb">Send</button></div>`;
+      <div class="row"><button class="btn small primary" data-act="sendfb">Send</button><button class="btn small ghost" data-act="bugopen">🐞 Report a problem</button></div></div>`;
   }
   function aboutCard() {
     if (!Online.enabled) return '';
@@ -2018,6 +2241,7 @@
     const weak = rows.filter(r => r.ss.tries >= 5).sort((a, b) => a.acc - b.acc).slice(0, 3);
     const mins = Math.round(who.stats.ms / 60000);
     const sOpt = (v, cur, lbl) => `<option value="${v}" ${String(v) === String(cur) ? 'selected' : ''}>${h(lbl)}</option>`;
+    if (Sync.isParent && Online.has('leaderboard') && (!Online.boardCache || Date.now() - Online.boardCache.at > 300000)) Online.boardList().then(() => { if (S.tab === 'parent' && S.screen === 'home') refreshView(); });
     const family = state.profiles.map(x => {
       const pr = gradeProgress(x, x.grade), xgs = gradeState(x, x.grade), last = lastActivity(x);
       const hard = skillsOf(x.grade).map(s => ({ s, ss: skillState(xgs, s.id) }))
@@ -2028,6 +2252,7 @@
           <span class="muted">Grade ${x.grade} · ${pr.pct}% mastered (${pr.mastered}/${pr.total})</span>
           <span class="bar gold"><i style="width:${pr.pct}%"></i></span>
           <span class="muted">${last ? 'Last played ' + new Date(last).toLocaleDateString() : 'Not played yet'}${hard ? ` · needs help: ${h(hard.s.title)}` : ''}</span>
+          ${notSaving(x) ? `<span class="warntext">⚠️ ${h(x.name)} played on ${new Date(notSaving(x).t).toLocaleDateString()} on a device that isn't saving to the family. On that device: Parents → Family account → Save now.</span>` : ''}
           ${x.friends && Online.has('invites') ? `<span class="muted">💌 ${Object.keys(x.friends).length} invited · ${Object.values(x.friends).filter(f => f.s === 'p' || f.s === 'r').length} played · +${fmt(Object.keys(x.inviteRewards || {}).length * INVITE_COINS)} 🪙</span>` : ''}</span></button>`;
     }).join('');
     // Pre-select a likely duplicate (same name), keeping the one that has played most recently
@@ -2182,7 +2407,7 @@
         else { S.pinStage = 'new'; S.pinErr = "Those didn't match. Start again."; }
         S.pinEntry = '';
       } else {
-        if (btoa('pm' + e) === state.pin) { S.parentOk = true; S.pinStage = null; }
+        if (btoa('pm' + e) === state.pin) { S.parentOk = true; S.pinStage = null; if (S.afterPin === 'unlockdev') { S.afterPin = null; unlocked = true; S.tab = 'play'; render(); toast('Unlocked until the game is closed'); return ACT.players(); } }
         else S.pinErr = 'Wrong PIN. Try again.';
         S.pinEntry = '';
       }
@@ -2196,11 +2421,32 @@
     home: () => { closeSheet(); S.screen = 'home'; S.tab = 'play'; R = null; Music.setScene('menu'); World.setEnergy(0); Sync.settle(); render(); },
     close: () => closeSheet(),
     mute: () => { const on = !(state.settings.sfx || state.settings.music); state.settings.sfx = on; state.settings.music = on; save(); render(); },
-    players: () => openSheet(`<div class="stack"><div class="row between"><h2>Switch player</h2><button class="iconbtn" data-act="close" aria-label="Close">✕</button></div>
+    players: () => lockedTo() ? openSheet(`<div class="stack center" style="align-items:center"><div style="font-size:3rem;line-height:1">🔒</div><h2>This is ${h(P().name)}'s device</h2>
+      <p class="muted">A grown-up set this device to play as ${h(P().name)}.</p>
+      <button class="btn block" data-act="unlockdev">Grown-up: switch with the PIN</button><button class="btn ghost block" data-act="close">OK</button></div>`, true)
+      : openSheet(`<div class="stack"><div class="row between"><h2>Switch player</h2><button class="iconbtn" data-act="close" aria-label="Close">✕</button></div>
       ${state.profiles.map(x => `<button class="btn block ${x.id === state.current ? 'primary' : ''}" data-act="pick" data-id="${x.id}">${h(x.avatar)} ${h(x.name)} · Grade ${x.grade}</button>`).join('')}
       <button class="btn ghost block" data-act="newplayer">+ Add a player</button></div>`),
     pick: d => { state.current = d.id; S = { screen: 'home', tab: 'play' }; closeSheet(); save(); render(); },
-    newplayer: () => { closeSheet(); S.np = null; S.screen = 'new'; chrome(false); renderNewPlayer(); },
+    bugopen: () => reportSheet('other'),
+    bugkind: d => { if (S.bug) S.bug.what = d.v; document.querySelectorAll('.bugkind').forEach(b => b.classList.toggle('on', b.dataset.v === d.v)); },
+    bugsend: () => {
+      const p = P(), b = S.bug || { what: 'other', msg: '' }, text = (($('#bugtext') || {}).value || '').trim().slice(0, 500);
+      const sent = Online.feedback({ kind: 'bug', what: b.what, text, screen: `${S.screen}/${S.tab}`.slice(0, 20), log: Diag.log().slice(0, 1000), sync: Sync.health().slice(0, 600), err: (b.msg || Diag.lastError()).slice(0, 1000), p: p ? p.id : undefined, g: p ? p.grade : undefined });
+      closeSheet(); S.bug = null;
+      toast(sent ? 'Thank you! Your report was sent. 🐞' : 'Reports can\'t be sent from this copy of the game.');
+    },
+    syncnow: () => {
+      closeSheet(); toast('Saving…');
+      Sync.saveNow().then(() => toast('Saved online ✓'), e => toast(h((e && e.userMessage) || 'Not saved yet. The game keeps trying, and the progress is safe on this device.')));
+    },
+    syncinfo: () => openSheet(`<div class="stack"><div class="row between"><h2>☁️ Family saving</h2><button class="iconbtn" data-act="close" aria-label="Close">✕</button></div>
+      <p>${h(Sync.label)}</p><p class="muted">Last saved online: ${Sync.lastSaved ? ago(Sync.lastSaved) : 'not yet on this device'}${Sync.rest ? ' · using the backup connection' : ''}</p>
+      <button class="btn block" data-act="syncnow">🔄 Save now</button>${Online.has('feedback') ? '<button class="btn ghost block" data-act="bugopen">🐞 Report a problem</button>' : ''}</div>`, true),
+    unlockdev: () => { closeSheet(); S.afterPin = 'unlockdev'; S.parentOk = false; S.pinStage = null; S.tab = 'parent'; S.screen = 'home'; render(); },
+    newplayer: () => {
+      if (lockedTo() && !S.parentOk) { closeSheet(); toast(`This device is set for ${h(P().name)}. Ask a grown-up to unlock it.`); return; }
+      closeSheet(); S.np = null; S.screen = 'new'; chrome(false); renderNewPlayer(); },
     cancelnew: () => { S.screen = 'home'; render(); },
     np: d => { S.np.name = ($('#np-name') || {}).value || S.np.name; S.np[d.k] = d.k === 'grade' ? +d.v : d.v; renderNewPlayer(); },
     createplayer: () => {
@@ -2549,6 +2795,7 @@
     pgrade: (d, el) => { const x = state.profiles.find(q => q.id === d.id); x.grade = +el.value; save(); S.keepScroll = true; render(); S.keepScroll = false; },
     set: (d, el) => { state.settings[d.k] = el.checked; save(); applyTheme(); },
     currency: (d, el) => { state.settings.currency = el.value; save(); },
+    devplayer: (d, el) => Sync.setDevicePlayer(d.id, el.value || null).then(() => toast(el.value ? 'Locked: that device plays only as this child' : 'Unlocked: that device can switch players'), e => toast(h(Sync.friendly(e)))),
     dailygoal: (d, el) => { state.settings.dailyGoal = +el.value; save(); S.keepScroll = true; render(); S.keepScroll = false; },
     wk: (d, el) => { S.wk = +el.value; S.keepScroll = true; render(); S.keepScroll = false; },
     musicvol: (d, el) => { state.settings.musicVol = +el.value; save(); Music.setVolume(+el.value); },
@@ -2563,6 +2810,7 @@
     const b = e.target.closest('[data-act]');
     if (!b || b.disabled) return;
     const fn = ACT[b.dataset.act];
+    Diag.tap(b.dataset.act);
     if (fn) { e.preventDefault(); fn(b.dataset, b, e); }
   });
   document.addEventListener('change', e => {

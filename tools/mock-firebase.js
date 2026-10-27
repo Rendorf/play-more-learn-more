@@ -79,7 +79,8 @@
     }
     if (col === 'devices') {
       if (op === 'set' && !D(path)) return id === u && validCode(data.code, f, 'device');
-      if (op === 'set' || op === 'update') return id === u && (!data.code || data.code === D(path).code);
+      if ((op === 'set' || op === 'update') && isParent(f) && Object.keys(data).every(k => k === 'player')) return true;
+      if (op === 'set' || op === 'update') return id === u && (!data.code || data.code === D(path).code) && !('player' in data);
       if (op === 'get') return isParent(f) || id === u;
       if (op === 'delete') return isParent(f) || id === u;
     }
@@ -105,9 +106,11 @@
   }
   function write(path, data, pending = true, mode = 'set') {
     if (data !== undefined) data = JSON.parse(JSON.stringify(data), (k, v) => (v && v.__server ? { __ts: realNow() } : v));
+    const drop = data ? Object.keys(data).filter(k => data[k] && data[k].__delete) : [];
     if (data === undefined) { const had = path in server.docs; delete server.docs[path]; persist(); if (had) notify(path, 'removed', pending); return; }
     const existed = path in server.docs;
     server.docs[path] = clone(mode === 'merge' || mode === 'update' ? Object.assign({}, server.docs[path] || {}, data) : data);
+    drop.forEach(k => delete server.docs[path][k]);
     persist(); notify(path, existed ? 'modified' : 'added', pending);
   }
   const check = (op, path, data) => { if (!allowed(op, path, data ? clone(data) : data)) throw err('permission-denied'); };
@@ -149,7 +152,7 @@
   };
   const firestore = () => db;
   firestore.Timestamp = Timestamp;
-  firestore.FieldValue = { serverTimestamp: () => ({ __server: true }) };
+  firestore.FieldValue = { serverTimestamp: () => ({ __server: true }), delete: () => ({ __delete: true }) };
   window.__mock = { server, write: (p, d) => write(p, d, false), resets: () => server.resets };
   window.firebase = { apps: [], initializeApp() { this.apps.push({}); }, firestore, auth };
 })();

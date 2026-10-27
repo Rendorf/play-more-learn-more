@@ -61,7 +61,7 @@ sequenceDiagram
 - A parent invite works the same way with `role: 'parent'` and 24 hours. A refused invite signs the parent out again, so a reload can't create a stray family.
 - A parent can cancel a code (delete it), unlink a device or remove another parent. A device can unlink itself.
 
-## Per-player documents, newest wins
+## Per-player documents: more progress wins, then the newest
 
 Each player is `families/{fid}/players/{pid}` with `data` (the player as JSON) and `updatedAt`. Two children playing at once on different devices write different documents, so they never overwrite each other.
 
@@ -78,12 +78,21 @@ sequenceDiagram
   S->>F: after 1.5 s: set players/{pid} {data, updatedAt}
   S->>F: set families/{fid} {shared, updatedAt} (merge),<br>delete players in the deleted map
   F-->>O: snapshot
-  O->>O: applyProfile: keep remote only if its updatedAt is newer
+  O->>O: applyProfile: more progress wins (answers, then rounds),<br>then the newer updatedAt; a winning local copy is uploaded
 ```
 
 - `Sync.track()` runs at the start of every `save()`. It only stamps players whose content really changed. This is why reading a player must never write defaults into it (see lazy defaults in [data-model.md](data-model.md)).
 - If an update for the active player arrives during a round, it waits. When the round ends, `Sync.settle()` stamps the round first, so this device's round wins.
 - Remote snapshots with pending local writes are ignored.
+- **More progress wins** (`src/merge.js`): a copy saved later with less progress never replaces a child's real progress. Newer grown-up edits from the other copy (wishes, streak wishes, leaderboard choice, grade) are carried over; coins never are. See [decision 0006](decisions/0006-more-progress-wins-and-rest-fallback.md).
+- **Timeouts and REST mode:**
+  - Every read and write has a 15 s timeout.
+  - Two stuck answers in a row switch the page to REST mode: the same documents over plain HTTPS with the family sign-in's token, polled every 20 s.
+  - ⚠️ in the top bar means changes have been unsaved for 3 minutes or more.
+  - The Family account card shows "Last saved online" and **Save now** (`Sync.saveNow()`).
+- **No silent unlink:** a null sign-in on a linked device keeps the link and shows "needs linking again".
+- **Device lock:** a parent sets `devices/{uid}.player` from their own login (Parents → Devices → "Plays as"). The device watches its own record and then plays only as that child. The PIN unlocks it until the game is closed. The device itself can't change `player`.
+- `?emu=1` points family sync at the local emulators (tests).
 
 ## The shared family document
 

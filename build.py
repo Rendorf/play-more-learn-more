@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parent
 SRC = ROOT / "src"
 ORDER = ["config.js", "util.js", "registry.js", "validate.js",
          *[f"grade{g}.js" for g in range(1, 10)],
-         "visuals.js", "fx.js", "music.js", "board.js", "reminders.js", "online.js", "engine.js"]
+         "visuals.js", "fx.js", "music.js", "board.js", "reminders.js", "online.js", "merge.js", "engine.js"]
 STAMP = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC")  # the build time, ignored by --check
 APP_HEAD = """<link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">

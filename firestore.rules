@@ -48,12 +48,16 @@ service cloud.firestore {
         allow delete: if isParent(fid);
       }
 
+      // player: a parent can lock the device to one child from their own login; the device itself can't change it
       match /devices/{uid} {
         allow create: if signedIn() && request.auth.uid == uid
-          && validCode(request.resource.data.code, fid, 'device');
+          && validCode(request.resource.data.code, fid, 'device') && !('player' in request.resource.data);
         allow read: if isParent(fid) || (signedIn() && request.auth.uid == uid);
-        allow update: if signedIn() && request.auth.uid == uid
-          && request.resource.data.code == resource.data.code;
+        allow update: if (signedIn() && request.auth.uid == uid
+            && request.resource.data.code == resource.data.code
+            && request.resource.data.get('player', null) == resource.data.get('player', null))
+          || (isParent(fid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['player'])
+            && (!('player' in request.resource.data) || (request.resource.data.player is string && request.resource.data.player.size() <= 24)));
         allow delete: if isParent(fid) || (signedIn() && request.auth.uid == uid);
       }
 
@@ -93,11 +97,13 @@ service cloud.firestore {
       allow read: if isAdmin();
     }
 
-    // 🚩 question reports and parents' messages: create only
+    // 🚩 question reports, parents' messages and 🐞 bug reports (with the game's own diagnostics, no names): create only
     match /feedback/{id} {
       allow create: if signedIn()
-        && request.resource.data.keys().hasOnly(['d', 'p', 'kind', 'reason', 'g', 'sk', 'lvl', 'mode', 'q', 'ans', 'inp', 'text', 'name', 'v', 'day', 'dev', 'src', 't'])
-        && request.resource.data.kind in ['question', 'general']
+        && request.resource.data.keys().hasOnly(['d', 'p', 'kind', 'reason', 'g', 'sk', 'lvl', 'mode', 'q', 'ans', 'inp', 'text', 'name', 'v', 'day', 'dev', 'src', 't', 'what', 'screen', 'log', 'sync', 'err'])
+        && request.resource.data.kind in ['question', 'general', 'bug']
+        && optStr(request.resource.data, 'what', 20) && optStr(request.resource.data, 'screen', 20) && optStr(request.resource.data, 'log', 2000)
+        && optStr(request.resource.data, 'sync', 600) && optStr(request.resource.data, 'err', 1000)
         && stamp(request.resource.data) && optStr(request.resource.data, 'reason', 20) && optStr(request.resource.data, 'sk', 40)
         && optNum(request.resource.data, 'lvl', 9) && optStr(request.resource.data, 'mode', 12) && optStr(request.resource.data, 'q', 300)
         && optStr(request.resource.data, 'ans', 80) && optStr(request.resource.data, 'inp', 80) && optStr(request.resource.data, 'text', 1000)

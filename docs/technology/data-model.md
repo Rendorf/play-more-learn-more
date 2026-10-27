@@ -34,6 +34,7 @@ The whole game state, as JSON. `save()` writes it 250 ms after a change. In the 
   },
   profiles: [Player],
   current: playerId | null,   // active player, per device (never synced)
+  lock?: playerId | null,     // a parent locked this device to one child (copied from devices/{uid}.player)
   updatedAt: ms,
   // optional, added later
   sharedAt?: ms,              // when the shared family settings last changed
@@ -129,7 +130,7 @@ Project `playmorelearnmore` (live). The preview uses a separate staging project 
 | `codes/{code}` | `fid`, `role` (`'device'` \| `'parent'`), `expires` (timestamp), `createdBy` | any signed-in account, one at a time by id (never listed) | create: a parent of `fid`, expiry under 2 days. Delete: a parent of `fid` |
 | `families/{fid}` | `createdBy`, `shared` (JSON string, below), `updatedAt` | parents and devices of the family | create: a non-anonymous account whose uid is `fid`. Update: members |
 | `families/{fid}/parents/{uid}` | `email`, `joinedAt`, `code?` | parents; the account itself | create: the family creator, or with a valid parent code. Delete: parents |
-| `families/{fid}/devices/{uid}` | `name`, `code`, `linkedAt`, `lastSeen`, `version` (BUILD), `ua` | parents; the device itself | create: with a valid device code. Update: the device itself, code unchanged. Delete: parents or the device |
+| `families/{fid}/devices/{uid}` | `name`, `code`, `linkedAt`, `lastSeen`, `version` (BUILD), `ua`, `player?` (the device lock) | parents; the device itself | create: with a valid device code, no `player`. Update: the device itself (code and `player` unchanged), or a parent changing only `player`. Delete: parents or the device |
 | `families/{fid}/players/{pid}` | `data` (the player as a JSON string), `updatedAt` | members | members |
 
 The `shared` string on the family document:
@@ -143,7 +144,7 @@ The `shared` string on the family document:
 | Path | Fields | Read | Write |
 |---|---|---|---|
 | `events/{auto}` | `d` (device id), `p` (player id), `type` (`open`, `player`, `lesson`, `round`, `place`, `wishset`, `wish`, `problem`, `invite`), `g`, `sk`, `mode`, `n`, `ok`, `secs`, `m`, `v`, `day`, `dev`, `src`, `msg`, `t` | admins | create only, any signed-in account, fixed keys and sizes |
-| `feedback/{auto}` | `d`, `p`, `kind` (`question` \| `general`), `reason`, `g`, `sk`, `lvl`, `mode`, `q`, `ans`, `inp`, `text`, `name`, `v`, `day`, `dev`, `src`, `t` | admins | create only, any signed-in account |
+| `feedback/{auto}` | `d`, `p`, `kind` (`question` \| `general` \| `bug`), `reason`, `g`, `sk`, `lvl`, `mode`, `q`, `ans`, `inp`, `text`, `name`, `v`, `day`, `dev`, `src`, `t`; bug reports add `what`, `screen`, `log` (≤2000), `sync` (≤600), `err` (≤1000) | admins | create only, any signed-in account |
 | `leaderboard/{pid}_{uid}` | `pid`, `owner`, `hid`, `nick`, `av`, `hat`, `g`, `pts`, `min`, `mst`, `str`, `frz`, `day`, `q`, `acc`, `wk`, `wpts`, `wmin`, `wq`, `wmst`, `v`, `t` | any signed-in account | the owning account only. Delete: owner or admin |
 | `push/{uid}` | `owner`, `sub: { endpoint, p256dh, auth }`, `tz`, `off`, `hour`, `kids: [{ av, str, frz, last, wish }]`, `t`, `lastSent`, `lastMsg` | that account; admins | that account (the sender writes `lastSent`, `lastMsg` with the admin SDK) |
 | `invites/{code}` | `owner`, `pid`, `t` (code is 6 of `A–Z0–9`) | the owner only | create by the owner |

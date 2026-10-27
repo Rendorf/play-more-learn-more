@@ -79,7 +79,7 @@ const PMLM_VAPID = 'BIzQyWxPqV1Cwj3PIbNEdwZyBNaF4RvJBa7qZxLoQMaMYcJlI2pNOy26ffZc
   const EMU = /[?&]emu=1/.test(location.search);
   const SDK = 'https://www.gstatic.com/firebasejs/10.14.1/';
   const load = src => new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
-  const show = html => { app.innerHTML = `<div class="row"><h1>PMLM test dashboard</h1><span class="muted">${EMU ? 'emulator · ' : ''}version 2026-10-26 09:12 UTC</span></div>${html}`; };
+  const show = html => { app.innerHTML = `<div class="row"><h1>PMLM test dashboard</h1><span class="muted">${EMU ? 'emulator · ' : ''}version 2026-10-27 19:02 UTC</span></div>${html}`; };
   if (typeof PMLM_FIREBASE === 'undefined' || !PMLM_FIREBASE) { show('<p class="err">This copy has no Firebase project set up (src/config.js).</p>'); return; }
 
   let fb, db;
@@ -173,7 +173,9 @@ const PMLM_VAPID = 'BIzQyWxPqV1Cwj3PIbNEdwZyBNaF4RvJBa7qZxLoQMaMYcJlI2pNOy26ffZc
 
     const problems = events.filter(e => e.type === 'problem').sort((a, b) => b.t - a.t).slice(0, 40)
       .map(e => `<tr><td>${h(e.day)}</td><td>${h(e.sk)}</td><td class="n">${h(e.n)}</td><td>${h(e.dev)}</td><td>${h(e.v)}</td><td><code>${h(e.msg)}</code></td></tr>`).join('');
-    const fbRows = feedback.sort((a, b) => b.t - a.t).map(f => f.kind === 'question'
+    const bugRows = feedback.filter(f => f.kind === 'bug').sort((a, b) => b.t - a.t).slice(0, 60)
+      .map(f => `<tr><td>${h(f.day)}</td><td>🐞 ${h(f.what)}</td><td>${h(f.text || '')}<br><span class="muted">screen ${h(f.screen || '?')} · ${h(f.dev || '')} · ${h(f.v || '')}</span></td><td><code>${h(f.sync || '')}</code></td><td><code>${h(f.err || '')}</code><br><span class="muted">${h(f.log || '')}</span></td></tr>`).join('');
+    const fbRows = feedback.filter(f => f.kind !== 'bug').sort((a, b) => b.t - a.t).map(f => f.kind === 'question'
       ? `<tr><td>${h(f.day)}</td><td>🚩 ${h(f.reason)}</td><td>${h(f.sk)} · L${h(f.lvl)} · ${h(f.mode)}</td><td>${h(f.q)}<br><span class="muted">answer: ${h(f.ans)} · child typed: ${h(f.inp || '–')}</span></td><td>${h(f.v)}</td></tr>`
       : `<tr><td>${h(f.day)}</td><td>💬 message</td><td>${h(f.name || 'anonymous')}</td><td>${h(f.text)}</td><td>${h(f.v)}</td></tr>`).join('');
 
@@ -196,6 +198,7 @@ const PMLM_VAPID = 'BIzQyWxPqV1Cwj3PIbNEdwZyBNaF4RvJBa7qZxLoQMaMYcJlI2pNOy26ffZc
       <div class="card"><h2>Invite a friend</h2><p class="muted">Counted by device. Rewards are counted once per friend.</p><div class="funnel">${invites.map(([l, n]) => `<div class="fbar"><span>${l}</span><i style="width:${n / imax * 100}%"></i><b class="n">${n}</b></div>`).join('')}</div></div>
       <div class="card"><h2>Each day (last 3 weeks)</h2><div class="wrap"><table><thead><tr><th>Day</th><th class="n">New children</th><th class="n">Children who played</th><th class="n">Rounds</th><th class="n">Minutes</th><th class="n">Devices opened</th></tr></thead><tbody>${dayRows}</tbody></table></div></div>
       <div class="card"><h2>Each child</h2><p class="muted">Anonymous ids. "src" is the link they first used (?src=…; "invite" for a friend's invite link).</p><div class="wrap"><table><thead><tr><th>Player</th><th class="n">Grade</th><th>src</th><th>Device</th><th>First day</th><th>Last day</th><th class="n">Days</th><th class="n">Rounds</th><th class="n">Minutes</th><th class="n">Mastered</th><th>Wish set</th></tr></thead><tbody>${kidRows || '<tr><td colspan="11" class="muted">No players yet.</td></tr>'}</tbody></table></div></div>
+      <div class="card"><h2>🐞 Bug reports</h2><p class="muted">Sent by children and parents, or offered by the game when something broke. "Saving" shows the device's family-saving status; the log is the last taps (no typed text).</p><div class="wrap"><table><thead><tr><th>Day</th><th>What</th><th>Details</th><th>Saving</th><th>Error and last taps</th></tr></thead><tbody>${bugRows || '<tr><td colspan="5" class="muted">No bug reports yet.</td></tr>'}</tbody></table></div></div>
       <div class="card"><h2>Feedback and 🚩 reports</h2><div class="wrap"><table><thead><tr><th>Day</th><th>Kind</th><th>Where / who</th><th>Details</th><th>Version</th></tr></thead><tbody>${fbRows || '<tr><td colspan="5" class="muted">Nothing yet.</td></tr>'}</tbody></table></div></div>
       <div class="card"><h2>Questions that failed to load</h2><div class="wrap"><table><thead><tr><th>Day</th><th>Skill</th><th class="n">Level</th><th>Device</th><th>Version</th><th>Message</th></tr></thead><tbody>${problems || '<tr><td colspan="6" class="muted">None. 🎉</td></tr>'}</tbody></table></div></div>
       <div class="card"><h2>Leaderboard</h2><p class="muted">Remove an entry if a name or score looks wrong. The child reappears after their next round unless a grown-up hides them.</p><div class="wrap"><table><thead><tr><th>Player</th><th class="n">Grade</th><th class="n">Points</th><th class="n">This week</th><th class="n">Minutes</th><th>Updated</th><th></th></tr></thead><tbody>${lbRows || '<tr><td colspan="7" class="muted">Nobody yet.</td></tr>'}</tbody></table></div></div>
