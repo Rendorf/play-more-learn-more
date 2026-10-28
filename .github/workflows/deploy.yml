@@ -1,10 +1,11 @@
-# Publishes the site to Cloudflare Pages: https://play.pmlm.uk/ is the game and https://pmlm.uk/ the landing page
-# (functions/index.js picks the page by host). GitHub Pages still publishes the repo root to the old address.
+# Publishes the site to its Cloudflare Worker: https://play.pmlm.uk/ is the game and https://pmlm.uk/ the landing page
+# (worker/index.js picks the page by host; tools/deploy/wrangler.json has the settings). GitHub Pages still publishes
+# the repo root to the old address.
 # - Live: after the Tests workflow passes on a push to main, or by hand from the Actions tab (main only).
-# - Preview: a pull request from this repository with the "preview" label gets its own address,
-#   https://pr-<number>.<project>.pages.dev/ (the game; /welcome is the landing page). Forks never get one.
-# Needs the repository secrets CLOUDFLARE_API_TOKEN (a token with Account → Cloudflare Pages → Edit) and
-# CLOUDFLARE_ACCOUNT_ID, and the repository variable CF_PAGES_PROJECT (the Pages project's name).
+# - Preview: a pull request from this repository with the "preview" label uploads a version that is not deployed, with
+#   its own address https://pr-<number>-<worker>.<account>.workers.dev/ when workers.dev is on. Forks never get one.
+# Needs the repository secrets CLOUDFLARE_API_TOKEN (a token with Account → Workers Scripts → Edit) and
+# CLOUDFLARE_ACCOUNT_ID, and the repository variable CF_WORKER_NAME (the Worker's name; CF_PAGES_PROJECT also works).
 name: Deploy
 on:
   workflow_run:
@@ -33,7 +34,7 @@ jobs:
     env:
       LIVE: ${{ github.event_name != 'pull_request' }}
       SHA: ${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.sha }}
-      PROJECT: ${{ vars.CF_PAGES_PROJECT }}
+      WORKER: ${{ vars.CF_WORKER_NAME || vars.CF_PAGES_PROJECT }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
       WRANGLER_SEND_METRICS: 'false'
     steps:
@@ -49,7 +50,7 @@ jobs:
           missing=''
           [ "$HAS_TOKEN" = true ] || missing="$missing secret CLOUDFLARE_API_TOKEN;"
           [ "$HAS_ACCOUNT" = true ] || missing="$missing secret CLOUDFLARE_ACCOUNT_ID;"
-          [ -n "$PROJECT" ] || missing="$missing variable CF_PAGES_PROJECT;"
+          [ -n "$WORKER" ] || missing="$missing variable CF_WORKER_NAME;"
           if [ -n "$missing" ]; then
             echo "::error::Not set up for Cloudflare yet. Add in Settings → Secrets and variables → Actions:$missing"
             exit 1
@@ -73,57 +74,55 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Try the site locally first (host routing, headers, pictures)
         run: tools/deploy/smoke.sh
-      - name: Find the Cloudflare branch
-        id: target
+      - name: Find the Worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          # The project was first made by Direct Upload, so its production branch may not be "main": ask Cloudflare
-          code=$(curl -sS -o project.json -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PROJECT") || code=000
+          # Clear errors before wrangler runs: a wrong token, account or Worker name
+          api=https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts
+          code=$(curl -sS -o worker.json -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api/$WORKER/settings") || code=000
           if [ "$code" != 200 ]; then
-            echo "::error::Cloudflare said $code for Pages project '$PROJECT': $(jq -r '[.errors[]?.message] | join("; ")' project.json 2>/dev/null)"
-            # Not found: show the project names this token can see in this account, so CF_PAGES_PROJECT can be fixed
+            echo "::error::Cloudflare said $code for the Worker '$WORKER': $(jq -r '[.errors[]?.message] | join("; ")' worker.json 2>/dev/null)"
+            [ "$code" = 403 ] && echo "::error::The API token needs Account → Workers Scripts → Edit for this account."
             if [ "$code" = 404 ]; then
-              names=$(curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-                "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects" \
-                | jq -r '[.result[]? | .name + " (" + ([.domains[]?] | join(", ")) + ")"] | join("; ")' 2>/dev/null)
-              echo "::error::Pages projects in this account: ${names:-none}. Set the repository variable CF_PAGES_PROJECT to the one serving pmlm.uk."
+              names=$(curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api" | jq -r '[.result[]?.id] | join(", ")' 2>/dev/null)
+              echo "::error::Workers in this account: ${names:-none}. Set the repository variable CF_WORKER_NAME to the one serving pmlm.uk."
             fi
             exit 1
           fi
-          prod=$(jq -r '.result.production_branch // empty' project.json)
-          subdomain=$(jq -r '.result.subdomain // empty' project.json)
-          rm -f project.json
-          if [ "$LIVE" = true ]; then
-            [ -n "$prod" ] || { echo "::error::Pages project '$PROJECT' has no production branch."; exit 1; }
-            branch=$prod
-          else
-            branch=pr-$PR_NUMBER
-          fi
-          echo "branch=$branch" >> "$GITHUB_OUTPUT"
-          echo "subdomain=$subdomain" >> "$GITHUB_OUTPUT"
-      - name: Deploy to Cloudflare Pages
+          rm -f worker.json
+      - name: Upload a preview version (not deployed)
+        id: preview
+        if: env.LIVE != 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          BRANCH: ${{ steps.target.outputs.branch }}
-        # From the repo root, so wrangler also publishes ./functions
         run: |
-          tools/deploy/node_modules/.bin/wrangler pages deploy _site --project-name "$PROJECT" --branch "$BRANCH" \
-            --commit-hash "$SHA" --commit-message "$(git log -1 --format=%s "$SHA")" --commit-dirty=true
+          set -o pipefail
+          tools/deploy/node_modules/.bin/wrangler versions upload -c tools/deploy/wrangler.json --name "$WORKER" \
+            --preview-alias "pr-$PR_NUMBER" --message "PR #$PR_NUMBER $(git log -1 --format=%h "$SHA")" | tee upload.log
+          url=$(grep -oE 'https://pr-[^ ]+\.workers\.dev' upload.log | head -1 || true)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: Deploy the Worker
+        if: env.LIVE == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        # No routes in wrangler.json, so the custom domains set in the dashboard (pmlm.uk, play.pmlm.uk) stay as they are
+        run: |
+          tools/deploy/node_modules/.bin/wrangler deploy -c tools/deploy/wrangler.json --name "$WORKER" \
+            --message "$(git log -1 --format='%h %s' "$SHA" | cut -c1-100)"
       - name: Check the live site
         if: env.LIVE == 'true'
         run: tools/deploy/check-live.sh
       - name: Summary
         if: success()
         env:
-          BRANCH: ${{ steps.target.outputs.branch }}
-          SUBDOMAIN: ${{ steps.target.outputs.subdomain }}
+          URL: ${{ steps.preview.outputs.url }}
         run: |
           if [ "$LIVE" = true ]; then
             echo "Live: https://play.pmlm.uk/ (game) and https://pmlm.uk/ (landing page), $(grep -o "const BUILD = '[^']*'" index.html)" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "Preview of #$PR_NUMBER: https://$BRANCH.$SUBDOMAIN/ (game) and https://$BRANCH.$SUBDOMAIN/welcome (landing page)" >> "$GITHUB_STEP_SUMMARY"
+            echo "Preview of #$PR_NUMBER uploaded (not live): ${URL:-no preview address, workers.dev may be off} (game; /welcome is the landing page)" >> "$GITHUB_STEP_SUMMARY"
           fi

@@ -35,7 +35,7 @@ test('only the old live addresses send devices on, keeping the invite and src pa
   assert.equal(Move.target(at('https://pmlm.uk/?stay=1&invite=XY')).url, P + '?invite=XY', 'the keep-playing-here switch is not passed on');
   assert.equal(Move.target(at('https://play.pmlm.uk/')), null, 'the new address stays');
   assert.equal(Move.target(at('https://play.pmlm.uk/?moveto=https://evil.example/')), null);
-  assert.equal(Move.target(at('https://pmlm-uk.pages.dev/')), null, 'Cloudflare preview copies stay');
+  assert.equal(Move.target(at('https://pr-11-play-more-learn-more.acct.workers.dev/')), null, 'Cloudflare preview addresses stay');
   assert.equal(Move.target(at('https://rendorf.github.io/pmlm-preview/')), null, 'the preview stays');
   assert.equal(Move.target(at('https://rendorf.github.io/play-more-learn-more-other/')), null);
   assert.equal(Move.target(at('https://rendorf.github.io/play-more-learn-more/#selftest')), null);

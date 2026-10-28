@@ -7,7 +7,7 @@
 
 Play More Learn More is one web page. Everything a child needs (lessons, questions, pictures, sounds, progress) is inside that page, so it opens fast, keeps working without internet once open, and runs on old tablets. There is no app store app and no server of our own.
 
-- **Cloudflare Pages** hosts the game at https://play.pmlm.uk/ and a "how it works" landing page at https://pmlm.uk/, for free. The old **GitHub Pages** address still runs, only to send devices on.
+- **Cloudflare** (a Worker with static files) hosts the game at https://play.pmlm.uk/ and a "how it works" landing page at https://pmlm.uk/, for free. The old **GitHub Pages** address still runs, only to send devices on.
 - **Progress** is saved in the browser on each device.
 - **Google Firebase** (a hosted login and database service) is optional. Families use it to see one child's progress on every device. A friends-and-family test also uses it for anonymous play stats, feedback, the leaderboard, invites and reminders.
 - **GitHub Actions** runs every test before a change goes live, publishes it to Cloudflare, and sends daily reminders once an hour.
@@ -98,7 +98,7 @@ flowchart TD
 ```mermaid
 flowchart LR
   device["Child's or parent's browser<br>(index.html)"]
-  pages["Cloudflare Pages<br>play.pmlm.uk: the game<br>pmlm.uk: landing page"]
+  pages["Cloudflare Worker<br>play.pmlm.uk: the game<br>pmlm.uk: landing page"]
   ghp["GitHub Pages<br>old address, moves devices on"]
   gstatic["gstatic.com<br>Firebase compat SDK 10.14.1"]
   auth["Firebase Auth<br>email, Google, anonymous"]
@@ -126,19 +126,19 @@ flowchart LR
 
 ## Hosting and routing
 
-One Cloudflare Pages project serves both names. Static files can't give the same path a different page per host, so a Pages Function on `/` only (`functions/index.js`) picks the page. Every other path is a plain static file on every host, and a mistyped one gets `404.html`.
+One Cloudflare Worker with static files serves both names (settings in `tools/deploy/wrangler.json`). Static files can't give the same path a different page per host, so the Worker's code (`worker/index.js`) runs for `/` only and picks the page. Every other path is a plain static file on every host, and a mistyped one gets `404.html`.
 
 ```mermaid
 flowchart TD
-  subgraph cf["Cloudflare Pages project (one deploy)"]
-    fn{"functions/index.js<br>(the path / only)"}
+  subgraph cf["Cloudflare Worker with static files (one deploy)"]
+    fn{"worker/index.js<br>(the path / only)"}
     wel["welcome.html<br>landing page"]
     game["index.html<br>the game"]
     files["static files on every host:<br>move.json, sw.js, icons, landing,<br>stats.html, manifest, 404.html"]
   end
   apex["pmlm.uk/ and www.pmlm.uk/"]
   play["play.pmlm.uk/"]
-  prev["pr-N.project.pages.dev/<br>(pull request labelled preview)"]
+  prev["pr-N-worker.account.workers.dev/<br>(pull request labelled preview)"]
   gh["rendorf.github.io/play-more-learn-more<br>(GitHub Pages, old game)"]
   apex --> fn
   play --> fn
@@ -149,19 +149,19 @@ flowchart TD
   gh -. "progress in the link fragment" .-> play
 ```
 
-- **The Deploy workflow** (`.github/workflows/deploy.yml`) publishes the project after the **Tests** workflow passes on `main`. `tools/deploy/stage.sh` copies only the served files, a pinned wrangler uploads them with `functions/`, and `tools/deploy/check-live.sh` checks both hosts afterwards. Details in [operations.md](operations.md#deploy-workflow).
+- **The Deploy workflow** (`.github/workflows/deploy.yml`) publishes the project after the **Tests** workflow passes on `main`. `tools/deploy/stage.sh` copies only the served files, a pinned wrangler deploys them with the Worker (`wrangler deploy`), and `tools/deploy/check-live.sh` checks both hosts afterwards. Details in [operations.md](operations.md#deploy-workflow).
 - **`?stay=1`** is the landing page's "Keep playing here" when play.pmlm.uk doesn't answer: pmlm.uk then serves the game as before.
-- **GitHub Pages** still publishes the repository root from `main` at the old address. It ignores `functions/` and `_headers`.
+- **GitHub Pages** still publishes the repository root from `main` at the old address. It ignores `worker/`, `tools/deploy/wrangler.json` and `_headers`.
 
 ## Deployment targets
 
 | | Live | Preview | Cloudflare preview | claude.ai artifact |
 |---|---|---|---|---|
 | Built by | `python3 build.py` | `python3 build.py --preview` | `python3 build.py` (the pull request's committed files) | `python3 build.py` (`build/artifact.html`) |
-| Published to | https://play.pmlm.uk/ (the game) and https://pmlm.uk/ (the landing page): one Cloudflare Pages project, by the Deploy workflow after the tests pass on `main`. The old address https://rendorf.github.io/play-more-learn-more/ (GitHub Pages, from `main`) moves devices to play.pmlm.uk | https://rendorf.github.io/pmlm-preview/ (`tools/deploy-preview.sh`, repo `Rendorf/pmlm-preview`) | `https://pr-<number>.<project>.pages.dev/` (`/welcome` is the landing page), by the Deploy workflow for a pull request labelled `preview` | the claude.ai artifact named in `CLAUDE.md`, with the Artifact tool |
+| Published to | https://play.pmlm.uk/ (the game) and https://pmlm.uk/ (the landing page): one Cloudflare Worker, by the Deploy workflow after the tests pass on `main`. The old address https://rendorf.github.io/play-more-learn-more/ (GitHub Pages, from `main`) moves devices to play.pmlm.uk | https://rendorf.github.io/pmlm-preview/ (`tools/deploy-preview.sh`, repo `Rendorf/pmlm-preview`) | a Worker version uploaded but not deployed, at `https://pr-<number>-<worker>.<account>.workers.dev/` when workers.dev is on (`/welcome` is the landing page), by the Deploy workflow for a pull request labelled `preview` | the claude.ai artifact named in `CLAUDE.md`, with the Artifact tool |
 | Settings | `src/config.js` | `src/config.preview.js` | `src/config.js` (the live settings) | `src/config.js`, but online parts switch themselves off |
 | Firebase | live project `playmorelearnmore` | a separate staging project (currently `null` until set up) | the live project, so open its game only with `#debug` | none: the artifact CSP blocks gstatic |
-| Device storage keys | `pmlm.*` | `pmlm-preview.*` | `pmlm.*` in the pages.dev origin | `pmlm.*` in the artifact's own origin |
+| Device storage keys | `pmlm.*` | `pmlm-preview.*` | `pmlm.*` in the workers.dev origin | `pmlm.*` in the artifact's own origin |
 | Cross-device saving | family accounts | staging family accounts | not for real use | the artifact `db` capability, one document per viewer |
 | Marked | no | red PREVIEW ribbon, "PMLM Preview" | no | no |
 

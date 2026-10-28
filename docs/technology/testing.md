@@ -33,7 +33,7 @@ Node's built-in test runner. `load.mjs` loads browser source files into a sandbo
 - `online.test.mjs`: where `Online` is on or off, feature switches, preview storage keys, the REST value format, reminders needing the Home Screen on iPhone, and the invite flow.
 - `move.test.mjs`: which addresses send devices on (never the new one), what a device takes along (`Move.payload()`), and packing it into the link.
 - `landing.test.mjs`: every decision the landing page makes before drawing (show, forward, move, iPhone code).
-- `route.test.mjs`: `functions/index.js` host routing, `_headers` for `move.json`, and that `tools/deploy/stage.sh` uploads only the served files.
+- `route.test.mjs`: the Worker's host routing (`worker/index.js`) and its settings (`tools/deploy/wrangler.json`), `_headers` for `move.json`, and that `tools/deploy/stage.sh` uploads only the served files.
 
 ### Rules tests (`tools/rules-test/rules.test.mjs`)
 

@@ -32,7 +32,7 @@ Clearing the browser's data for the site deletes all of this from the device.
 
 ## 3. What is stored online, and who can see it
 
-The online parts use one **Firebase** project (a Google cloud service). The game (play.pmlm.uk) and the landing page (pmlm.uk) are served by **Cloudflare Pages**; the old address by **GitHub Pages**. Fonts load from **Google Fonts**, and the family-account code loads from Google's servers, so those services see the device's internet address when the game opens.
+The online parts use one **Firebase** project (a Google cloud service). The game (play.pmlm.uk) and the landing page (pmlm.uk) are served by **Cloudflare** (a Worker with static files); the old address by **GitHub Pages**. Fonts load from **Google Fonts**, and the family-account code loads from Google's servers, so those services see the device's internet address when the game opens.
 
 ### The landing page (pmlm.uk)
 

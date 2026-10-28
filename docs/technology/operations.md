@@ -51,20 +51,20 @@ curl -s https://pmlm.uk/ | grep pmlm-page
 
 ## Deploy workflow
 
-https://play.pmlm.uk/ (the game) and https://pmlm.uk/ (the landing page) are one Cloudflare Pages project. `functions/index.js` serves `welcome.html` at `/` for pmlm.uk and www.pmlm.uk, and the game for every other host. `.github/workflows/deploy.yml` ("Deploy") publishes it:
+https://play.pmlm.uk/ (the game) and https://pmlm.uk/ (the landing page) are one Cloudflare **Worker** with static files (its settings are `tools/deploy/wrangler.json`). The Worker (`worker/index.js`) runs for `/` only: it serves `welcome.html` for pmlm.uk and www.pmlm.uk, and the game for every other host. Every other file comes straight from the static files, with `_headers` applied. `.github/workflows/deploy.yml` ("Deploy") publishes it:
 
 - **When:** after the **Tests** workflow passes on a push to `main`, or by hand (Actions → Deploy → Run workflow, from `main` only).
-- **Steps:** `python3 build.py --check`, then `tools/deploy/stage.sh _site` copies only the served files (it refuses if one is missing, so a half-built site is never published), then the pinned wrangler in `tools/deploy/` runs `wrangler pages deploy` from the repo root, so `functions/` goes up too.
-- **Branch:** the project was first made by Direct Upload, so the workflow asks Cloudflare for the project's production branch instead of assuming `main`.
+- **Steps:** `python3 build.py --check`, then `tools/deploy/stage.sh _site` copies only the served files (it refuses if one is missing, so a half-built site is never published), then `tools/deploy/smoke.sh`, then the pinned wrangler in `tools/deploy/` runs `wrangler deploy -c tools/deploy/wrangler.json`. `wrangler.json` has no routes, so the custom domains set in the dashboard stay as they are.
+- **Worker check:** before wrangler runs, the workflow asks Cloudflare for the Worker by name, so a wrong token (403) or name (404, with the account's Worker names listed) fails with a clear message.
 - **Live check:** `tools/deploy/check-live.sh` retries for up to 3 minutes until play.pmlm.uk serves the same `BUILD` as the commit, pmlm.uk is the landing page (`<meta name="pmlm-page" content="landing">`), `move.json` has `Access-Control-Allow-Origin: *` and `no-store`, and pmlm.uk still serves `sw.js`. A red Deploy run after a merge means the live site is not what `main` says.
-- **Settings:** repository secrets `CLOUDFLARE_API_TOKEN` (a token with Account → Cloudflare Pages → Edit) and `CLOUDFLARE_ACCOUNT_ID`, and the repository variable `CF_PAGES_PROJECT` (the Pages project's name), under Settings → Secrets and variables → Actions. Without them the first step fails and names what is missing.
-- **The Deploy workflow runs it before every publish, and you can run it before pushing a change to the deploy:** `bash tools/deploy/smoke.sh` stages the site into a temporary folder and serves it with `wrangler pages dev` on port 8788 (`SMOKE_PORT`). It checks the game, `/welcome`, `move.json`'s headers, the not-found page (`404.html`), and which page each host gets.
+- **Settings:** repository secrets `CLOUDFLARE_API_TOKEN` (a token with Account → Workers Scripts → Edit) and `CLOUDFLARE_ACCOUNT_ID`, and the repository variable `CF_WORKER_NAME` (the Worker's name; the older name `CF_PAGES_PROJECT` also works), under Settings → Secrets and variables → Actions. Without them the first step fails and names what is missing.
+- **The Deploy workflow runs it before every publish, and you can run it before pushing a change to the deploy:** `bash tools/deploy/smoke.sh` stages the site into a temporary folder and serves it with `wrangler dev` and the real `wrangler.json` on port 8788 (`SMOKE_PORT`). It checks the game, `/welcome`, `move.json`'s headers, the not-found page (`404.html`), and which page each host gets.
 
 ### Cloudflare preview
 
-Label a pull request `preview` (create the label once with `gh label create preview`). The Deploy workflow then publishes the pull request's version to `https://pr-<number>.<project>.pages.dev/` (the game; `/welcome` is the landing page) and writes the link in the run's summary. Each new push to the pull request updates it. Pull requests from forks never get one.
+Label a pull request `preview`. The Deploy workflow then uploads the pull request's version to the Worker **without deploying it** (`wrangler versions upload`), which proves the token, the Worker's name and the bundle before anything goes live. When the Worker's workers.dev address is on, the version also gets a preview address, `https://pr-<number>-<worker>.<account>.workers.dev/` (the game; `/welcome` is the landing page), shown in the run's summary. Each new push to the pull request uploads again. Pull requests from forks never get one.
 
-The copy uses the live settings (`src/config.js`), and pages.dev isn't localhost, so the online extras would write to the live project: open its game only with `#debug`. Use it to check the landing page, the routing and the headers, not to play.
+The preview uses the live settings (`src/config.js`), and workers.dev isn't localhost, so the online extras would write to the live project: open its game only with `#debug`. Use it to check the landing page, the routing and the headers, not to play.
 
 ## Preview on real phones
 
@@ -118,7 +118,7 @@ Rules are **not** deployed by GitHub. Whenever `firestore.rules` changes:
 
 ## Rollback
 
-**Fastest:** Cloudflare dashboard → the Pages project → Deployments → the last good deployment → **Rollback**. play.pmlm.uk and pmlm.uk serve it again at once. It lasts only until the next deploy from `main`, and it doesn't touch the old GitHub Pages address, so follow it with a revert.
+**Fastest:** Cloudflare dashboard → Workers & Pages → the Worker → Deployments → the last good version → **Rollback** (or `wrangler rollback` in `tools/deploy`). play.pmlm.uk and pmlm.uk serve it again at once. It lasts only until the next deploy from `main`, and it doesn't touch the old GitHub Pages address, so follow it with a revert.
 
 Undo a merged pull request. Once the revert is on `main` and its tests pass, the Deploy workflow publishes the old version (GitHub Pages takes 1–2 minutes), and everyone's progress is kept (the progress tests check rollback).
 
@@ -138,12 +138,12 @@ To switch off one online feature for everyone without a rollback, set it to `fal
 
 ## Moving the game to play.pmlm.uk
 
-pmlm.uk served the game until October 2026; now it is the landing page and the game is at play.pmlm.uk. Browsers keep progress per address, so the old GitHub address and pmlm.uk each send a device on once, with its progress (`src/move.js`, `src/landing.js`; see [UX flows](../design/ux-flows.md#11-moving-to-playpmlmuk)). A browser only moves once `https://play.pmlm.uk/move.json` answers; until then pmlm.uk says the progress is safe and offers **Keep playing here** (`/?stay=1`). The iPhone/iPad code screen on pmlm.uk doesn't wait for that check, so play.pmlm.uk must be live before the merge (step 2). The owner's steps, in order:
+pmlm.uk served the game until October 2026; now it is the landing page and the game is at play.pmlm.uk. Browsers keep progress per address, so the old GitHub address and pmlm.uk each send a device on once, with its progress (`src/move.js`, `src/landing.js`; see [UX flows](../design/ux-flows.md#11-moving-to-playpmlmuk)). A browser only moves once `https://play.pmlm.uk/move.json` answers; until then pmlm.uk says the progress is safe and offers **Keep playing here** (`/?stay=1`). The iPhone/iPad code screen waits for the same check. The owner's steps, in order:
 
-1. **Cloudflare deploy settings:** make the API token and add the secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` and the variable `CF_PAGES_PROJECT` ([Deploy workflow](#deploy-workflow)).
-2. **Custom domain:** in Cloudflare, add `play.pmlm.uk` to the same Pages project (Custom domains), next to pmlm.uk. Wait until it is active.
+1. **Cloudflare deploy settings:** make the API token and add the secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` and the variable `CF_WORKER_NAME` ([Deploy workflow](#deploy-workflow)). The token needs Account → Workers Scripts → Edit.
+2. **Custom domain:** in Cloudflare, add `play.pmlm.uk` to the same Worker (Settings → Domains & Routes → Custom domain), next to pmlm.uk. Wait until it is active.
 3. **Firebase:** Authentication → Settings → Authorized domains → add `play.pmlm.uk`. If the browser API key has website restrictions in Google Cloud, add it there too. Without this, parent login and linking fail on the new address.
-4. **Before merging:** label the pull request `preview` and check the pages.dev copy (the landing page at `/welcome`; the game only with `#debug`). Take a [backup](#backup-and-restore).
+4. **Before merging:** label the pull request `preview` and check that the Deploy run's preview upload is green (and, if workers.dev is on, the preview address: the landing page at `/welcome`, the game only with `#debug`). Take a [backup](#backup-and-restore).
 5. **After merging:** the Deploy run is green, and both `curl` checks in [Release](#release) pass.
 6. **One real move on your own devices:** a browser that played on pmlm.uk opens pmlm.uk and lands on play.pmlm.uk with its players; on an iPhone, an old Home Screen icon shows **Copy progress code**, and the new icon takes it.
 7. **Tell families** what they do once: parents log in again on play.pmlm.uk; each child's device is linked again with a new code; **🔒 Plays as** is set again; daily reminders are turned on again; on iPhone and iPad, follow the four steps on the old icon and delete it only after the new icon shows the players.

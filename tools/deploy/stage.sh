@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Copies only the files the site serves into a new folder, for Cloudflare Pages (tools/deploy/stage.sh _site).
+# Copies only the files the site serves into a new folder, for the Cloudflare Worker (tools/deploy/stage.sh _site).
 # The repo root also holds src/, tests/, tools/ and the Firebase files, which must not be published there.
-# functions/ is not copied: wrangler reads it from the repo root, where it is run.
+# worker/ is not copied: wrangler bundles worker/index.js itself (tools/deploy/wrangler.json).
 # Fails if a served file is missing, so a half-built site is never published.
 # STAGE_ROOT=<dir> stages from another folder instead of this repo (used by tests/unit/route.test.mjs).
 set -euo pipefail

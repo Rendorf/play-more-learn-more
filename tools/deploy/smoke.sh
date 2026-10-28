@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Tries the site in Cloudflare's own local server (wrangler pages dev) before it is published: stages the served
-# files (stage.sh) into a temporary folder, serves them with functions/ from the repo root, and checks that the game,
-# the landing page, move.json's headers and the not-found page come back as they will on pmlm.uk.
+# Tries the site in Cloudflare's own local server (wrangler dev) before it is published: stages the served files
+# (stage.sh) into a temporary folder, serves them with the Worker (worker/index.js) and the settings in
+# tools/deploy/wrangler.json, and checks that the game, the landing page, move.json's headers and the not-found page
+# come back as they will on pmlm.uk.
 # Run from anywhere: bash tools/deploy/smoke.sh (installs the pinned wrangler on first use). SMOKE_PORT changes the port.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -30,8 +31,11 @@ cleanup() {
 trap cleanup EXIT
 
 tools/deploy/stage.sh "$TMP/site"
-# From the repo root, so wrangler compiles ./functions just as `wrangler pages deploy` does
-"$WRANGLER" pages dev "$TMP/site" --ip 127.0.0.1 --port "$PORT" --persist-to "$TMP/state" \
+# The real settings, pointed at the staged copy
+node -e 'const fs = require("fs"), path = require("path"), c = JSON.parse(fs.readFileSync("tools/deploy/wrangler.json", "utf8"));
+  delete c.$schema; c.main = path.resolve("worker/index.js"); c.assets.directory = process.argv[1];
+  fs.writeFileSync(process.argv[2], JSON.stringify(c, null, 2));' "$TMP/site" "$TMP/wrangler.json"
+"$WRANGLER" dev -c "$TMP/wrangler.json" --ip 127.0.0.1 --port "$PORT" --persist-to "$TMP/state" \
   --show-interactive-dev-session=false >"$TMP/server.log" 2>&1 &
 SERVER_PID=$!
 
@@ -97,10 +101,10 @@ get "$BASE/no-such-page"
 if [ "$STATUS" = 404 ] && has 'Page not found'; then ok "a mistyped address gets 404.html, not the game"
 else bad "/no-such-page should be 404 with 404.html (status $STATUS)"; fi
 
-get "$BASE/functions/index.js"
-[ "$STATUS" = 404 ] && ok "functions/ is not served as files" || bad "/functions/index.js is served (status $STATUS)"
+get "$BASE/worker/index.js"
+[ "$STATUS" = 404 ] && ok "the Worker's source is not served as a file" || bad "/worker/index.js is served (status $STATUS)"
 
-# The host checks need wrangler to pass the Host header through to the function
+# The host checks need wrangler to pass the Host header through to the Worker
 on() { get "http://$1:$PORT$2" --resolve "$1:$PORT:127.0.0.1"; }
 on pmlm.uk /
 if [ "$STATUS" = 200 ] && has "$MARKER"; then
@@ -114,7 +118,7 @@ if [ "$STATUS" = 200 ] && has "$MARKER"; then
   on pmlm.uk /move.json
   [ "$STATUS" = 200 ] && has '"play-more-learn-more"' && ok "pmlm.uk/move.json is served" || bad "pmlm.uk/move.json (status $STATUS)"
 elif [ "$STATUS" = 200 ] && has "const BUILD = '"; then
-  echo "note - wrangler pages dev did not pass the pmlm.uk host to the function; host checks skipped (tests/unit/route.test.mjs covers them)"
+  echo "note - wrangler dev did not pass the pmlm.uk host to the Worker; host checks skipped (tests/unit/route.test.mjs covers them)"
 else
   bad "pmlm.uk/ should be the landing page (status $STATUS)"
 fi

@@ -61,7 +61,7 @@ test('the owner\'s debug and self-test bookmarks still open the game', () => {
 });
 
 test('anywhere else the page only shows: previews, the new address, switched-off moving', () => {
-  assert.equal(env().decide(at('https://pmlm-uk.pages.dev/welcome'), store(played()), browser).act, 'show');
+  assert.equal(env().decide(at('https://pr-11-play-more-learn-more.acct.workers.dev/welcome'), store(played()), browser).act, 'show');
   assert.equal(env().decide(at('https://play.pmlm.uk/welcome'), store(played()), browser).act, 'show');
   assert.equal(env({ PMLM_MOVE_TO: '' }).decide(at('https://pmlm.uk/'), store(played()), browser).act, 'show');
   assert.equal(env({ PMLM_ENV: 'preview', PMLM_MOVE_TO: '' }).PLAY, './', 'the preview copy plays next to it');
