@@ -21,3 +21,6 @@ const PMLM_VAPID = 'BIzQyWxPqV1Cwj3PIbNEdwZyBNaF4RvJBa7qZxLoQMaMYcJlI2pNOy26ffZc
 // The game's own address. The old addresses (rendorf.github.io/play-more-learn-more, and pmlm.uk, now the landing
 // page) send each device here with its progress (src/move.js), once this address serves move.json. Empty: no moving.
 const PMLM_MOVE_TO = 'https://play.pmlm.uk/';
+// Google Analytics (src/analytics.js): the web stream of the project's Analytics property, used on pmlm.uk and
+// play.pmlm.uk only, cookieless until a grown-up allows cookies. Empty: no Analytics.
+const PMLM_GA = 'G-51Y7VFGZGB';

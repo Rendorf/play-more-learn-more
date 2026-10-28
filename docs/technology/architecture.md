@@ -87,6 +87,7 @@ flowchart TD
 |---|---|
 | `engine.js` | Saved state and `save()`, rounds and mastery, wishes, parent area, all screens. Holds `Sync` (family accounts) and `Cloud` (claude.ai storage). |
 | `online.js` | Family-test extras over Firebase REST with its own anonymous account: stats events, feedback, leaderboard, push subscriptions, invites, Home Screen install. Separate from `Sync`. |
+| `analytics.js` | Google Analytics for the landing page and the game, on pmlm.uk and play.pmlm.uk only (`Analytics`): Consent Mode cookieless until a grown-up allows cookies (the `pmlm_analytics` cookie on `.pmlm.uk`), advertising off, game stats events without ids. Google's script loads with the first thing sent. Also inlined into the landing page. |
 | `board.js` | Leaderboard nicknames, ISO weeks, active minutes, ranking. Pure, so unit tests load it alone. |
 | `reminders.js` | Reminder messages and when to send one. Pure. The hourly sender loads the same file. |
 | `grade1.js` … `grade9.js` | Lessons and question generators (format in [`src/CONTRACT.md`](../../src/CONTRACT.md)). |

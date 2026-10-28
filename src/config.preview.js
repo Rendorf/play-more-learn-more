@@ -9,3 +9,5 @@ const PMLM_FEATURES = { stats: true, feedback: true, leaderboard: true, reminder
 const PMLM_VAPID = '';
 // The preview never moves anywhere
 const PMLM_MOVE_TO = '';
+// The preview sends nothing to Google Analytics
+const PMLM_GA = '';

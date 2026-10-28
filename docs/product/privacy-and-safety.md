@@ -36,7 +36,7 @@ The online parts use one **Firebase** project (a Google cloud service). The game
 
 ### The landing page (pmlm.uk)
 
-The "how it works" page has no analytics, trackers, ads or sign-in, and sends nothing to Firebase. For a visitor who only reads it, it stores nothing on the device. Before drawing, it reads the game's saved progress at pmlm.uk, if there is any, only to decide whether to move that device to play.pmlm.uk (see above). Like the game, it loads fonts from Google Fonts.
+The "how it works" page has no ads or sign-in, and sends nothing to Firebase. It uses **Google Analytics** (below), which counts without cookies until a grown-up taps **Allow** on its banner. For a visitor who only reads it, it stores nothing on the device; answering the banner stores the choice (the cookie `pmlm_analytics`) and, after **Allow**, Google's own cookies. Before drawing, it reads the game's saved progress at pmlm.uk, if there is any, only to decide whether to move that device to play.pmlm.uk (see above). Like the game, it loads fonts from Google Fonts.
 
 ### Family accounts (optional)
 
@@ -66,6 +66,19 @@ Each device signs in to these with its **own anonymous account**, separate from 
 
 **Push messages** travel through the browser maker's push service (for example Apple or Google), as for any website notification.
 
+### Google Analytics
+
+The landing page (pmlm.uk) and the game (play.pmlm.uk) use **Google Analytics** to count visits and see how families find and use the game (`src/analytics.js`). It runs on those two addresses only; the old GitHub address, the preview and the claude.ai copy never load it.
+
+| | |
+|---|---|
+| **What is sent** | Which screen is opened (`/screen/play`, `/screen/round`, …), Play taps and section views on the landing page, and the game's stats events **without ids**: grade, skill id, round mode, questions answered and right, seconds, skills newly mastered, wish milestone, invite step. Google also receives the device's internet address, browser and screen size, as for any web request. |
+| **Never sent** | Names, player or device ids, typed text, error messages, the campaign tag |
+| **Cookies** | Only after a grown-up taps **Allow** on the landing page's banner or turns on **Allow Google Analytics cookies** in Parents → Settings. The choice is the cookie `pmlm_analytics` on `.pmlm.uk`, shared by the landing page and the game, for a year. Until then Google's Consent Mode counts without cookies. Children never see the question. **No thanks** also removes Google's own cookies. |
+| **Advertising** | Off: Google signals and ad personalisation are disabled, ad storage is always denied, and ad data is redacted |
+| **Who can read it** | The owner, in the Google Analytics property linked to the Firebase project |
+| **Switch off** | Per device: turn off **Share anonymous play stats** in Parents → Settings (the game then sends nothing to Analytics). For everyone: set `PMLM_GA = ''` in `src/config.js` |
+
 ## 4. Names and the leaderboard
 
 A child's name is never in the stats. It can appear in only three places outside the family:
@@ -81,6 +94,7 @@ Children can't send anything to each other. The leaderboard has no profiles, pho
 | Control | Where | Default |
 |---|---|---|
 | Share anonymous play stats | Parents → Settings (per device) | On |
+| Allow Google Analytics cookies | The landing page's banner, or Parents → Settings (per device, shared by pmlm.uk and play.pmlm.uk) | **Off** (counts without cookies) |
 | Children can share invite links | Parents → Settings (per device) | On |
 | How each child shows on the leaderboard | Parents → Players | Nickname |
 | Daily reminder | Parents → Daily reminder (per device) | **Off** |
@@ -116,7 +130,8 @@ The game is used by children, so children's privacy laws are likely to apply. Ex
 - TODO(owner): write and publish a privacy notice for parents (and a child-friendly version).
 - TODO(owner): decide on verifiable parental consent before any data leaves the device (for example, ask a grown-up before stats, the leaderboard and invites switch on).
 - TODO(owner): confirm the lawful basis for anonymous stats, and whether stats should be **off** by default.
-- TODO(owner): confirm the Firebase data location and sign Google's data processing terms; list all processors (Google/Firebase, Cloudflare, GitHub, push services, Google Fonts).
+- TODO(owner): confirm the Firebase data location and sign Google's data processing terms; list all processors (Google/Firebase, Google Analytics, Cloudflare, GitHub, push services, Google Fonts).
+- TODO(owner): Google Analytics' terms require a privacy policy that discloses it and its cookies. The landing page's "What do you collect?" answer is a short version; replace it with the full privacy notice above. In the Analytics property, keep Google signals off and choose a short data retention.
 - TODO(owner): decide whether "First name" on the public leaderboard should be allowed at all.
 - TODO(owner): set a data retention period and a breach response plan.
 - TODO(owner): a data protection impact assessment before any school use.
