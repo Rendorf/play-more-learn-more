@@ -49,7 +49,16 @@ Run these from the repo root.
 - **Family accounts (Firebase project `playmorelearnmore`; Email/Password, Google and Anonymous sign-in):**
   - Parents log in with email/password or Google; the first login creates `families/{uid}`.
   - A child's device joins with a link code (`codes/{code}`, 30 minutes, server-timed) through anonymous auth and becomes `families/{fid}/devices/{uid}`.
-  - Each player is `families/{fid}/players/{id}` (`data` = JSON, `updatedAt`). Newest `updatedAt` wins. `Sync.track()` runs inside `save()` and stamps changed players.
+  - Each player is `families/{fid}/players/{id}` (`data` = JSON, `updatedAt`). **More progress wins** (`src/merge.js`: answers, then rounds), then the newer `updatedAt`. Newer grown-up edits are carried over. `Sync.track()` runs inside `save()` and stamps changed players.
+  - **Never silent:**
+    - every Sync read and write has a 15 s timeout, and two stuck answers switch the page to REST mode (the same documents over HTTPS, polled every 20 s);
+    - ⚠️ in the top bar means changes have been unsaved for 3 minutes;
+    - the Family account card has "Last saved online" and Save now;
+    - a null sign-in on a linked device asks for re-linking instead of quietly stopping.
+    See `docs/technology/decisions/0006-*`.
+  - **Device lock:** a parent sets `devices/{uid}.player` (Parents → Devices → Plays as). The device then plays only as that child (`state.lock`), and the PIN unlocks it until the game closes.
+  - **Bug reports:** 🐞 in the Me tab and Parents, plus a pop-up when something breaks (errors, saving stuck, a question failing; never mid-round). They're sent as `feedback` with `kind: 'bug'` and the game's diagnostics (`Diag.log()`, `Sync.health()`), and appear on stats.html.
+  - `?emu=1` also points family sync at the local emulators (`tests/e2e/family.spec.mjs`).
   - The shared doc holds the PIN, money symbol, player order and a `deleted` map. Which player is active stays per device.
   - When a device joins, the family's PIN and settings win, and a same-name-and-grade child prompts "Is this the same …?" (combine).
 - **Combine players** (`combineProfiles`) keeps the best record per skill. `state.aliases` maps removed ids so later backup codes update the kept player.

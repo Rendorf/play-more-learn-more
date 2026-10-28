@@ -3,7 +3,7 @@
 **Who this is for:** engineers changing `Sync`, `save()` or any saved player field.
 **Last checked against:** BUILD 2026-10-25 18:32 UTC.
 
-**Status:** Accepted
+**Status:** Accepted; the "newest wins" comparison is superseded by [0006](0006-more-progress-wins-and-rest-fallback.md) (more progress wins).
 
 ## Context
 

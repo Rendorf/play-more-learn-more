@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import test, { after, beforeEach } from 'node:test';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs, writeBatch, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, deleteField, collection, getDocs, writeBatch, Timestamp } from 'firebase/firestore';
 
 const env = await initializeTestEnvironment({
   projectId: 'demo-pmlm',
@@ -284,4 +284,36 @@ test('invites: the friend reports progress; the owner pays once, only after the 
   await assertFails(updateDoc(rec(f), { name: 'New' , rewarded: null }), 'the friend cannot undo the payment');
   await assertFails(deleteDoc(rec(kid)));
   await assertSucceeds(setDoc(doc(device('anon1'), 'events/inv1'), event({ type: 'invite', mode: 'play', n: undefined, ok: undefined, secs: undefined, m: undefined, sk: undefined })));
+});
+
+// ---------- Device lock and bug reports ----------
+test('device lock: only the family\'s parents choose which child a device plays as', async () => {
+  const dad = parent('dad');
+  await makeFamily(dad, 'dad');
+  await putCode('LOCK2345', { fid: 'dad', role: 'device', expires: minutes(30), createdBy: 'dad' });
+  const kid = await linkDevice('kid1', 'dad', 'LOCK2345');
+  const rec = db => doc(db, 'families/dad/devices/kid1');
+  await assertSucceeds(updateDoc(rec(dad), { player: 'p1' }));
+  await assertFails(updateDoc(rec(dad), { player: 'p1', name: 'Renamed' }), 'a parent changes only the lock');
+  await assertFails(updateDoc(rec(dad), { player: 12 }), 'a player id is text');
+  await assertFails(updateDoc(rec(kid), { player: 'p2' }), 'the device cannot unlock itself');
+  await assertSucceeds(updateDoc(rec(kid), { lastSeen: 5, version: 'x' }), 'the device still updates its own record');
+  await assertSucceeds(updateDoc(rec(dad), { player: deleteField() }), 'the parent unlocks it');
+  const eve = parent('eve');
+  await makeFamily(eve, 'eve');
+  await assertFails(updateDoc(doc(eve, 'families/dad/devices/kid1'), { player: 'p1' }), 'another family\'s parent');
+  await putCode('LOCK6789', { fid: 'dad', role: 'device', expires: minutes(30), createdBy: 'dad' });
+  await assertFails(setDoc(doc(device('kid2'), 'families/dad/devices/kid2'), { name: 'Tablet', code: 'LOCK6789', linkedAt: 1, lastSeen: 1, player: 'p1' }), 'a new device cannot lock itself');
+});
+
+test('bug reports carry the game\'s diagnostics, with limited sizes', async () => {
+  const kid = device('anon1');
+  const bug = extra => Object.assign({ d: 'd1', kind: 'bug', what: 'points', text: 'My stars are gone', screen: 'home/play', log: '12s tab, 15s skill', sync: 'status=stuck role=device mode=rest', err: 'timeout', v: 'x', day: '2026-10-27', dev: 'ios', t: 1 }, extra);
+  await assertSucceeds(setDoc(doc(kid, 'feedback/b1'), bug()));
+  await assertSucceeds(setDoc(doc(kid, 'feedback/b2'), bug({ log: 'x'.repeat(2000), err: 'y'.repeat(1000) })));
+  await assertFails(setDoc(doc(kid, 'feedback/b3'), bug({ log: 'x'.repeat(2001) })), 'log too long');
+  await assertFails(setDoc(doc(kid, 'feedback/b4'), bug({ sync: 'x'.repeat(601) })), 'sync summary too long');
+  await assertFails(setDoc(doc(kid, 'feedback/b5'), bug({ email: 'a@b.c' })), 'unknown field');
+  await assertFails(setDoc(doc(kid, 'feedback/b6'), bug({ kind: 'crash' })), 'unknown kind');
+  await assertFails(getDocs(collection(kid, 'feedback')), 'only admins read reports');
 });
