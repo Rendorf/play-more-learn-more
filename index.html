@@ -527,7 +527,7 @@ const PMLM_FIREBASE = {
 // that copy keeps its own storage on the device (keys start with pmlm-preview.) and uses the staging project.
 const PMLM_ENV = 'live';
 // Online extras for the family test (src/online.js). Set one to false to switch it off without a rollback.
-const PMLM_FEATURES = { stats: true, feedback: true, leaderboard: true, reminders: true, invites: true };
+const PMLM_FEATURES = { stats: true, feedback: true, leaderboard: true, reminders: true, invites: true, crowd: true };
 // Public key for daily reminders (Web Push), written by tools/admin/setup-push.mjs. Empty: reminders stay hidden.
 const PMLM_VAPID = 'BIzQyWxPqV1Cwj3PIbNEdwZyBNaF4RvJBa7qZxLoQMaMYcJlI2pNOy26ffZckF5GzjKDiG4D7YlIX9DB_-1A3A0';
 // The game's own address. The old address (rendorf.github.io/play-more-learn-more) sends each device here with its
@@ -27038,9 +27038,51 @@ const Board = (() => {
     acc: { label: 'First-try', icon: '🎯', min: 50 },
   };
 
+  // The crowd: made-up players so the board never feels empty. The same on every device on the same day: 2–4 join
+  // each day, each plays on some days and drifts away after a while. They carry levels, not numbers: rows() turns a
+  // level into a value for each view from the real players in it, so most sit below every real player and none
+  // ever leads.
+  const CROWD_FROM = '2026-10-20', CROWD_DAYS = 180;
+  const CROWD_GRADES = [1, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 7, 7, 8, 9];
+  const unit = s => hash(s) / 4294967296;
+  const dateOf = n => { const u = new Date(n * 86400000); return new Date(u.getUTCFullYear(), u.getUTCMonth(), u.getUTCDate()); };
+  let crowdMemo = null;
+  // opts: { today, avatars, hats }
+  function crowd(opts) {
+    const end = dayNum(opts.today), key = opts.today + '|' + (opts.avatars || []).join('') + '|' + (opts.hats || []).join('');
+    if (crowdMemo && crowdMemo.key === key) return crowdMemo.list;
+    const avatars = opts.avatars && opts.avatars.length ? opts.avatars : ['🙂'], hats = opts.hats || [];
+    const weekStart = end - ((dateOf(end).getDay() + 6) % 7), wk = weekId(dateOf(end)), list = [];
+    for (let n = Math.max(dayNum(CROWD_FROM), end - CROWD_DAYS); n <= end; n++) {
+      const arrivals = 2 + hash('crowd:' + n) % 3;
+      for (let i = 0; i < arrivals; i++) {
+        const pid = `zc${n}_${i}`, r = k => unit(pid + ':' + k);
+        // keen: the chance of playing on a given day; life: the days until they stop coming back
+        const keen = 0.3 + 0.7 * r('keen'), life = 5 + Math.floor(36 * r('life')), s = r('strength');
+        // strength against the weaker real players: a few beginners, about 1 in 7 strong enough to overtake
+        const strength = s < 0.06 ? 0.1 + 0.15 * r('s') : s < 0.2 ? 1.1 + 0.6 * r('s') : 0.25 + 0.6 * r('s');
+        let played = 0, week = 0, run = 0, last = -1;
+        for (let d = n; d <= Math.min(end, n + life); d++) {
+          if (d !== n && r('day' + d) >= keen) continue;
+          played++; if (d >= weekStart) week++;
+          run = d - last === 1 ? run + 1 : 1; last = d;
+        }
+        list.push({
+          pid, bot: true, nick: nick(pid, 0), av: avatars[hash(pid + ':av') % avatars.length],
+          hat: hats.length && r('hat') < 0.33 ? hats[hash(pid + ':hat') % hats.length] : '', g: CROWD_GRADES[hash(pid + ':g') % CROWD_GRADES.length],
+          lv: strength * played / (played + 2), wlv: week ? strength * week / (week + 1) : 0, alv: 0.7 + 0.25 * Math.min(strength, 1.4),
+          str: run, frz: 0, day: dayOf(dateOf(last)), q: played >= 3 ? 50 : 0, wk: week ? wk : '', t: Number.MAX_SAFE_INTEGER,
+        });
+      }
+    }
+    crowdMemo = { key, list };
+    return list;
+  }
+
   // docs: leaderboard documents from every device. One row per player (newest document wins), ranked by metric.
-  // opts: { period: 'week' | 'all', metric, grade (0 = all), week, today }
-  function rows(docs, opts) {
+  // opts: { period: 'week' | 'all', metric, grade (0 = all), week, today }. crowd: from crowd(), joins only views
+  // that have a real player, scaled to them and always below the best.
+  function rows(docs, opts, crowdDocs) {
     const newest = {};
     for (const d of docs || []) if (d && d.pid && (!newest[d.pid] || (d.t || 0) > (newest[d.pid].t || 0))) newest[d.pid] = d;
     const m = METRICS[opts.metric] || METRICS.pts, out = [];
@@ -27053,12 +27095,26 @@ const Board = (() => {
         : (opts.period === 'week' && m.week ? d[m.week] : d[opts.metric === 'acc' ? 'acc' : opts.metric]) || 0;
       if (value > 0) out.push(Object.assign({}, d, { value }));
     }
+    if (crowdDocs && out.length) {
+      // ref: about the 25th percentile of the real players here (the lowest when there are four or fewer)
+      const real = out.map(r => r.value).sort((a, b) => a - b), ref = real[Math.floor((real.length - 1) / 4)], best = real[real.length - 1];
+      const weekly = opts.period === 'week';
+      for (const d of crowdDocs) {
+        if (weekly && d.wk !== opts.week) continue;
+        if (opts.grade && d.g !== opts.grade) continue;
+        if (m.min && (d.q || 0) < m.min) continue;
+        let value = opts.metric === 'str' ? (streakAlive(d.day, opts.today, 0) ? d.str : 0)
+          : Math.round(ref * (opts.metric === 'acc' ? d.alv : weekly && m.week ? d.wlv : d.lv));
+        if (value >= best) value = Math.min(best - 1, Math.floor(best * (0.88 + 0.1 * unit(d.pid + ':cap'))));
+        if (value > 0) out.push(Object.assign({}, d, { value }));
+      }
+    }
     out.sort((a, b) => b.value - a.value || (a.t || 0) - (b.t || 0));
     out.forEach((r, i) => { r.rank = i && r.value === out[i - 1].value ? out[i - 1].rank : i + 1; });
     return out;
   }
 
-  return { nick, weekId, dayOf, activeSecs, streakAlive, rows, METRICS, hash, ADJ, ANIMALS };
+  return { nick, weekId, dayOf, activeSecs, streakAlive, rows, crowd, METRICS, hash, ADJ, ANIMALS };
 })();
 
 </script>
@@ -27175,7 +27231,7 @@ const PMLM_REMINDERS = (() => {
 // offline, and failures are quiet. Rules for every collection are in firestore.rules.
 const Online = (() => {
   const CFG = typeof PMLM_FIREBASE !== 'undefined' ? PMLM_FIREBASE : null;
-  const FEATURES = Object.assign({ stats: true, feedback: true, leaderboard: true, reminders: true, invites: true }, typeof PMLM_FEATURES !== 'undefined' ? PMLM_FEATURES : null);
+  const FEATURES = Object.assign({ stats: true, feedback: true, leaderboard: true, reminders: true, invites: true, crowd: true }, typeof PMLM_FEATURES !== 'undefined' ? PMLM_FEATURES : null);
   const VAPID = typeof PMLM_VAPID !== 'undefined' ? PMLM_VAPID : '';
   const KEY = typeof PMLM_ENV !== 'undefined' && PMLM_ENV === 'preview' ? 'pmlm-preview.' : 'pmlm.';
   const params = new URLSearchParams(location.search), HASH = location.hash.replace('#', '');
@@ -27677,7 +27733,7 @@ const Move = (() => {
   // The preview copy (build.py --preview) keeps its own storage, so it never reads or writes real progress
   const KEY = typeof PMLM_ENV !== 'undefined' && PMLM_ENV === 'preview' ? 'pmlm-preview.' : 'pmlm.';
   const STORE_KEY = KEY + 'v1';
-  const BUILD = '2026-10-28 06:36 UTC';   // replaced with the build time by build.py
+  const BUILD = '2026-10-28 08:24 UTC';   // replaced with the build time by build.py
 
   const AVATARS = ['🦊', '🐼', '🐯', '🐸', '🐧', '🦄', '🐨', '🐰'];
   const SHOP_AVATARS = [['🦁', 40], ['🦉', 40], ['🐙', 40], ['🦋', 40], ['🐳', 50], ['🦩', 50], ['🐲', 60], ['🦖', 60], ['👽', 80], ['🤖', 80], ['🐉', 120], ['🦄', 0]].filter(a => a[1] > 0);
@@ -29768,7 +29824,10 @@ const Move = (() => {
     if (!c || Date.now() - c.at > 300000) Online.boardList().then(() => { if (S.tab === 'top' && S.screen === 'home') refreshView(); });
     // This device's own players always show their latest numbers, even before the server has them
     const docs = ((c && c.docs) || []).concat(state.profiles.map(boardDoc));
-    const rows = Board.rows(docs, { period: o.period, metric: o.metric, grade: o.grade, week: Board.weekId(new Date()), today: Board.dayOf(new Date()) });
+    const today = Board.dayOf(new Date());
+    // The crowd joins only a board that loaded, so "only this device's players show" stays true offline
+    const crowd = c && !c.error && Online.has('crowd') ? Board.crowd({ today, avatars: AVATARS.concat(CHEST_AVATARS), hats: HATS.map(x => x[0]) }) : null;
+    const rows = Board.rows(docs, { period: o.period, metric: o.metric, grade: o.grade, week: Board.weekId(new Date()), today }, crowd);
     const m = Board.METRICS[o.metric];
     // The child always sees their own row: ranked, or "–" until they score in this view
     const mine = rows.find(r => r.pid === p.id)

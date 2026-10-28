@@ -4,7 +4,7 @@
 // Paste the staging project's web config here (Firebase console → Project settings → Your apps).
 const PMLM_FIREBASE = null;
 const PMLM_ENV = 'preview';
-const PMLM_FEATURES = { stats: true, feedback: true, leaderboard: true, reminders: true, invites: true };
+const PMLM_FEATURES = { stats: true, feedback: true, leaderboard: true, reminders: true, invites: true, crowd: true };
 // Public key for reminders on the staging project (tools/admin/setup-push.mjs --preview writes it)
 const PMLM_VAPID = '';
 // The preview never moves anywhere

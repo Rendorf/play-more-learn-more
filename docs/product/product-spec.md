@@ -185,6 +185,7 @@ Family accounts are optional. Without one, progress stays on each device, and ba
 - Each entry shows the name or nickname, avatar, hat, grade and numbers. Nothing else. There is no way to message another child.
 - Deleting a player hides them from the board.
 - **Active minutes** count at most 90 seconds for each answered question, so a game left open doesn't add minutes.
+- **The crowd:** made-up players fill the board so it never feels empty. 2–4 join each day; each plays on some days and drifts away after a while. Their numbers are scaled to the real players in each view: most sit below every real player, about 1 in 10 is worth overtaking, and none ever leads a view. A view with no real player shows none. They look like any other row, are the same on every device on the same day, and are made on the device (never stored or sent). `PMLM_FEATURES.crowd` switches them off.
 
 ## 15. Daily reminders
 

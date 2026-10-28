@@ -2112,7 +2112,10 @@
     if (!c || Date.now() - c.at > 300000) Online.boardList().then(() => { if (S.tab === 'top' && S.screen === 'home') refreshView(); });
     // This device's own players always show their latest numbers, even before the server has them
     const docs = ((c && c.docs) || []).concat(state.profiles.map(boardDoc));
-    const rows = Board.rows(docs, { period: o.period, metric: o.metric, grade: o.grade, week: Board.weekId(new Date()), today: Board.dayOf(new Date()) });
+    const today = Board.dayOf(new Date());
+    // The crowd joins only a board that loaded, so "only this device's players show" stays true offline
+    const crowd = c && !c.error && Online.has('crowd') ? Board.crowd({ today, avatars: AVATARS.concat(CHEST_AVATARS), hats: HATS.map(x => x[0]) }) : null;
+    const rows = Board.rows(docs, { period: o.period, metric: o.metric, grade: o.grade, week: Board.weekId(new Date()), today }, crowd);
     const m = Board.METRICS[o.metric];
     // The child always sees their own row: ranked, or "–" until they score in this view
     const mine = rows.find(r => r.pid === p.id)

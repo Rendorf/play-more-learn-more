@@ -154,6 +154,8 @@ The `shared` string on the family document:
 
 Readers of the leaderboard keep the newest document per `pid` (by `t`), because the same child can play on several devices.
 
+The Top tab also mixes in the crowd from `Board.crowd()` (`src/board.js`): made-up players generated on the device from the date (ids `zc<day>_<n>`, never starting with `p`). They are never stored or sent, so they never appear in this collection or on stats.html. `Board.rows()` scales their levels to the real players in each view and keeps them below the best.
+
 ### claude.ai artifact copy
 
 No Firestore. `Cloud` in `engine.js` keeps one document per viewer through the artifact `db` capability, at `data/users/{viewerId}/pmlm`, with `state` (the whole `pmlm.v1` JSON) and `updatedAt`. On load, the newer of the device copy and the stored copy wins.
