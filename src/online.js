@@ -4,7 +4,7 @@
 // offline, and failures are quiet. Rules for every collection are in firestore.rules.
 const Online = (() => {
   const CFG = typeof PMLM_FIREBASE !== 'undefined' ? PMLM_FIREBASE : null;
-  const FEATURES = Object.assign({ stats: true, feedback: true, leaderboard: true, reminders: true, invites: true }, typeof PMLM_FEATURES !== 'undefined' ? PMLM_FEATURES : null);
+  const FEATURES = Object.assign({ stats: true, feedback: true, leaderboard: true, reminders: true, invites: true, crowd: true }, typeof PMLM_FEATURES !== 'undefined' ? PMLM_FEATURES : null);
   const VAPID = typeof PMLM_VAPID !== 'undefined' ? PMLM_VAPID : '';
   const KEY = typeof PMLM_ENV !== 'undefined' && PMLM_ENV === 'preview' ? 'pmlm-preview.' : 'pmlm.';
   const params = new URLSearchParams(location.search), HASH = location.hash.replace('#', '');

@@ -95,6 +95,10 @@ test('leaderboard: ranking, filters, my own row, nickname and hiding', async ({ 
   expect((await names()).filter(n => n === 'Twin Device')).toHaveLength(1);
   await expect(page.locator('.lbrow', { hasText: 'Twin Device' })).toContainText('10');
   await expect(page.locator('.lbrow.me')).toContainText('You · Grade 3');
+  // the crowd fills the board below the real leader
+  const crowd = await page.evaluate(() => Board.crowd({ today: Board.dayOf(new Date()), avatars: ['🙂'], hats: [] }).map(x => x.nick));
+  expect((await names()).filter(n => crowd.includes(n)).length).toBeGreaterThan(3);
+  expect(crowd).not.toContain((await names())[0]);
   await act(page, 'lbmetric', '[data-v="min"]');
   await expect(page.locator('.lbrow').first()).toContainText('Seed Player 5');   // 25 minutes this week
   await act(page, 'lbperiod', '[data-v="all"]');
@@ -122,8 +126,9 @@ test('leaderboard: ranking, filters, my own row, nickname and hiding', async ({ 
   await tab(page, 'top');
   await expect(page.locator('#view')).toContainText('A grown-up has hidden Dina from the leaderboard');
   expect(await names()).not.toContain(nick2);
-  // nobody's name appears unless a grown-up chooses it
+  // nobody's name appears unless a grown-up chooses it, and the crowd lives on the device only
   expect(JSON.stringify(await docs('leaderboard'))).not.toContain('Dina');
+  expect((await docs('leaderboard')).filter(x => String(x.pid).startsWith('zc'))).toHaveLength(0);
 });
 
 test('looking at the leaderboard and Parents never changes any child\'s saved progress', async ({ page }) => {

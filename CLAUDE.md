@@ -16,7 +16,7 @@ A DopaDrill-style maths practice game for the Cambridge curriculum, Grades 1–9
   - `visuals.js`: rich-text markup and 26 SVG teaching pictures.
   - `fx.js`: themes (Space, Ocean, Jungle, Candy), world backgrounds, particles, Web Audio sound effects (`Sfx`; `Sfx.audio()` shares the audio clock with the music), and the mechanical key sound `Sfx.key`.
   - `music.js`: background music composed live with Web Audio (`Music`): a song per world and four moods, each played with the world's instruments. `compose()`/`bar()` are pure and unit-tested.
-  - `board.js`: leaderboard nicknames, ISO weeks, active minutes, ranking (`Board`, pure).
+  - `board.js`: leaderboard nicknames, ISO weeks, active minutes, ranking and the crowd of made-up players (`Board`, pure).
   - `reminders.js`: reminder messages and when to send one (`PMLM_REMINDERS`, pure; also loaded by the sender).
   - `online.js`: family-test extras over Firebase REST with its own anonymous sign-in (`Online`): stats events, feedback, leaderboard docs, push subscriptions, invite links (`Online.invite`), Home Screen install. Separate from `Sync`.
   - `engine.js`: state and storage, rounds and mastery, wishes, parent area, family accounts (`Sync`), the Top tab, all screens.
@@ -80,6 +80,7 @@ Run these from the repo root.
 - **Failed questions:** if a skill's questions can't be made on a device, the child sees "didn't load", and a note goes to `player.diag` (synced) with the user agent and `BUILD`, and a `problem` stats event.
 - **Family test extras (`Online`):** collections `events` and `feedback` (create only), `leaderboard/{pid}_{uid}` (owner writes; readers keep the newest doc per pid), `push/{uid}`, and `admins/{uid}` (written in the console; gates reading stats). Queue in `pmlm.q`. Off on localhost without `?emu=1`, in `#debug`/`#selftest` and in the artifact.
 - **Leaderboard and reminder fields** follow the lazy-defaults rule: `stats.active`, `week {id, pts, secs, q, mst}`, `board` ('nick' | 'name' | 'hidden') and `nickSeed` are only written by a played round or a grown-up's choice. Older versions keep them untouched; `tests/e2e/progress.spec.mjs` checks this.
+- **The crowd (`Board.crowd`, `PMLM_FEATURES.crowd`):** made-up players on the Top tab, generated on the device from the date, so every device shows the same ones each day (2–4 join daily; ids `zc…`). They carry levels, not numbers: `Board.rows(docs, opts, crowd)` scales them to the real players in each view (about the 25th percentile), caps them below the best, and adds none to a view without a real player. They join only a board that loaded, and are never stored or sent.
 - **Background music (`Music`):**
   - **Styles:** a style (`theme` = the world's own song: Starhop, Island Hop, Vine Swing, Sugar Rush; or `lofi`, `calm`, `adventure`, `party`) is arranged for the current world. The world sets the key, the lead and chord instruments, the percussion and the ambience.
   - **Playback:** it starts on the first tap or key press and plays everywhere at one level, continuously (re-renders never restart it). Changing world or style crossfades.
