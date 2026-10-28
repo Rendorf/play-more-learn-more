@@ -4,6 +4,8 @@ Play More Learn More is a free, playful maths practice game for the Cambridge cu
 
 **New here? Start with [overview.md](overview.md)** — two pages on the problem, the product, how children learn with it and where it is going.
 
+**For families:** the public "how it works" page is https://pmlm.uk/, with a part for kids and a part for grown-ups (setup, family accounts, controls, safety, questions). Send families there; the game itself is at https://play.pmlm.uk/. Its source is `src/landing.html` and `src/landing.js`.
+
 ## Who should read what
 
 | You are… | Read first | Then |
@@ -31,15 +33,15 @@ Play More Learn More is a free, playful maths practice game for the Cambridge cu
 - [Security](technology/security.md): database rules, what is public by design, and secrets.
 - [Content authoring](technology/content-authoring.md): adding or changing a skill.
 - [Testing](technology/testing.md): every check that runs before a change reaches `main`.
-- [Operations](technology/operations.md): releasing, preview, backups, reminders and rollback.
-- [Decisions](technology/decisions/README.md): short records of the main architecture choices.
+- [Operations](technology/operations.md): releasing (the Deploy workflow to Cloudflare), previews, backups, reminders, rollback and the move to play.pmlm.uk.
+- [Decisions](technology/decisions/README.md): short records of the main architecture choices, most recently [0007](technology/decisions/0007-landing-page-and-play-subdomain.md): a landing page at pmlm.uk and the game at play.pmlm.uk.
 
 ## Design
 - [Design principles](design/design-principles.md): the rules the product follows, with examples.
 - [Design system](design/design-system.md): tokens per world, keycap buttons, type, spacing and icons.
 - [Worlds and motion](design/worlds-and-motion.md): the four worlds, effects, celebrations and sound.
 - [Visuals catalog](design/visuals-catalog.md): the 26 teaching pictures.
-- [UX flows](design/ux-flows.md): the key journeys for children and grown-ups.
+- [UX flows](design/ux-flows.md): the key journeys for children and grown-ups, including the landing page and moving to play.pmlm.uk.
 - [Voice and copy](design/voice-and-copy.md): how the game talks to children and to grown-ups.
 - [Accessibility](design/accessibility.md): what works today and the known gaps.
 

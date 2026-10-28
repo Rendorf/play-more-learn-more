@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Play More Learn More: how it works</title>
+<meta name="description" content="A free, playful maths practice game for the Cambridge curriculum, Grades 1 to 9. How children play, and how grown-ups set it up and stay in control.">
+<meta name="pmlm-page" content="landing">
+<link rel="canonical" href="https://pmlm.uk/">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="theme-color" content="#0b1026">
+<meta property="og:title" content="Play More Learn More">
+<meta property="og:description" content="Free Cambridge maths practice for Grades 1 to 9: short lessons, hints when you need them, and wishes to unlock.">
+<meta property="og:image" content="https://pmlm.uk/icons/icon-512.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Baloo+2:wght@500;700;800&display=swap">
+<style>
+/* The landing page uses the game's Space world: the same colours, fonts and keycap buttons. Plain selector lists and
+   no color-mix(), so older tablets show it properly. */
+:root {
+  --bg: #0b1026; --bg2: #1c1f55; --panel: #151c44; --panel2: #222b62; --line: rgba(200, 214, 255, .16);
+  --ink: #eef1ff; --muted: #a3aedb; --accent: #ffd23f; --accent-ink: #2b1f00; --accent-side: #a8860f;
+  --go: #3ee6a8; --go-ink: #00261a; --pop: #ff6bd0; --sky: #62d4ff; --side: #121845;
+  --font-display: "Baloo 2", "Arial Rounded MT Bold", "Trebuchet MS", system-ui, sans-serif;
+  --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --r: 18px; color-scheme: dark;
+}
+html { box-sizing: border-box; scroll-behavior: smooth; }
+*, *::before, *::after { box-sizing: inherit; }
+body {
+  margin: 0; min-height: 100vh; color: var(--ink); font: 17px/1.5 var(--font-body);
+  background: var(--bg) radial-gradient(120% 60% at 50% 0%, var(--bg2), var(--bg) 70%) no-repeat;
+  -webkit-font-smoothing: antialiased; overflow-x: hidden;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+h1, h2, h3 { font-family: var(--font-display); line-height: 1.1; margin: 0; }
+h2 { font-size: 2rem; font-weight: 800; }
+h3 { font-size: 1.3rem; font-weight: 700; }
+p { margin: 0; }
+a { color: var(--sky); }
+:focus-visible { outline: 3px solid var(--sky); outline-offset: 3px; }
+.wrap { max-width: 1040px; margin: 0 auto; padding: 0 16px; }
+.muted { color: var(--muted); }
+.stack > * + * { margin-top: 12px; }
+[hidden] { display: none !important; }
+
+/* Keycap buttons, as in the game */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 54px; padding: 10px 24px;
+  border: 0; border-radius: var(--r); background: var(--panel2); color: var(--ink); text-decoration: none; cursor: pointer;
+  font: 800 1.15rem/1.1 var(--font-display); position: relative; top: 0;
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, .25), 0 6px 0 var(--side), 0 13px 14px -7px rgba(0, 0, 0, .5);
+  transition: top .06s, box-shadow .06s; -webkit-tap-highlight-color: transparent;
+}
+.btn:active, .btn.on { top: 5px; box-shadow: inset 0 2px 0 rgba(255, 255, 255, .14), 0 1px 0 var(--side), 0 3px 6px -4px rgba(0, 0, 0, .5); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); box-shadow: inset 0 2px 0 rgba(255, 255, 255, .45), 0 6px 0 var(--accent-side), 0 13px 14px -7px rgba(0, 0, 0, .5); }
+.btn.primary:active { box-shadow: inset 0 2px 0 rgba(255, 255, 255, .3), 0 1px 0 var(--accent-side); }
+.btn.big { min-height: 64px; font-size: 1.45rem; padding: 12px 34px; }
+.btn.small { min-height: 44px; font-size: 1rem; padding: 6px 16px; }
+
+/* Hero */
+.hero { padding: 36px 0 26px; text-align: center; }
+.logo { display: inline-flex; align-items: center; gap: 14px; }
+.logo img { width: 64px; height: 64px; border-radius: 16px; box-shadow: 0 5px 0 #000a; }
+.logo h1 { font-size: 2.4rem; font-weight: 800; text-align: left; line-height: .95; }
+.logo h1 span { color: var(--accent); display: block; }
+.tagline { font-size: 1.2rem; max-width: 640px; margin: 18px auto 22px; color: #dfe4ff; }
+.facts { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 18px; }
+.facts span { border: 1px solid var(--line); border-radius: 99px; padding: 3px 12px; font-size: .9rem; color: var(--muted); }
+
+/* For kids / For grown-ups switch */
+.switch { position: sticky; top: 0; z-index: 5; padding: 12px 0 16px; background: var(--bg); background: rgba(11, 16, 38, .94); }
+.switch .wrap { display: flex; gap: 12px; justify-content: center; }
+.switch .btn { flex: 1 1 0; max-width: 300px; }
+.switch .btn.on { background: var(--go); color: var(--go-ink); box-shadow: inset 0 2px 0 rgba(255, 255, 255, .3), 0 1px 0 #1d8c64; }
+.js .part { display: none; }
+.js .part.on { display: block; }
+.part { padding: 18px 0 40px; }
+.part + .part { border-top: 1px solid var(--line); }
+.lead { font-size: 1.15rem; color: #dfe4ff; max-width: 700px; margin-top: 8px; }
+.sectiontitle { margin-top: 38px; }
+
+/* Steps: a card per step, with a picture from the game */
+.steps { list-style: none; margin: 22px 0 0; padding: 0; display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); counter-reset: step; }
+.step { background: var(--panel); border: 1px solid var(--line); border-radius: 22px; padding: 18px; counter-increment: step; display: flex; flex-direction: column; gap: 10px; }
+.step h3::before { content: counter(step); display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; margin-right: 10px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-size: 1.05rem; vertical-align: 2px; }
+.kids .step h3::before { background: var(--go); color: var(--go-ink); }
+.step p { color: #dfe4ff; }
+.step b { color: var(--ink); }
+.shot { margin-top: auto; padding-top: 6px; }
+.shot img { display: block; width: 100%; max-width: 330px; height: auto; margin: 0 auto; border-radius: 16px; border: 1px solid var(--line); box-shadow: 0 10px 24px -12px #000; background: var(--bg); }
+.kids .step p { font-size: 1.12rem; }
+.tag { display: inline-block; font-size: .78rem; font-weight: 700; border-radius: 99px; padding: 1px 9px; background: var(--panel2); color: var(--muted); vertical-align: 2px; }
+
+/* Tips, controls, FAQ */
+.tips { margin-top: 22px; display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+.tip { background: var(--panel2); border-radius: 16px; padding: 14px 16px; }
+.grid { margin-top: 18px; display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+.ctl { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; }
+.ctl h3 { font-size: 1.1rem; margin-bottom: 4px; }
+.ctl p { font-size: .97rem; color: #dfe4ff; }
+.note { margin-top: 18px; background: rgba(255, 210, 63, .1); border: 1px solid rgba(255, 210, 63, .35); border-radius: 16px; padding: 14px 16px; }
+.safe { margin-top: 18px; display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+.safe div { border-left: 4px solid var(--go); padding: 4px 0 4px 12px; }
+details { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 12px 16px; margin-top: 10px; }
+summary { cursor: pointer; font-family: var(--font-display); font-weight: 700; font-size: 1.12rem; }
+details p, details ol { margin-top: 8px; color: #dfe4ff; }
+ol.plain { padding-left: 22px; margin: 8px 0 0; }
+ol.plain li + li { margin-top: 4px; }
+.cta { text-align: center; margin-top: 34px; }
+footer { border-top: 1px solid var(--line); padding: 22px 0 40px; color: var(--muted); font-size: .9rem; text-align: center; }
+
+/* The panels shown while this device moves on to the game (or copies its progress code) */
+.busy main, .busy footer, .busy .switch, .busy .hero { display: none; }
+.panel { max-width: 560px; margin: 0 auto; padding: 18vh 16px 40px; text-align: center; }
+.panel ol { text-align: left; }
+.panel textarea { width: 100%; min-height: 110px; margin-top: 10px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: 13px/1.3 ui-monospace, monospace; padding: 10px; }
+.oldicon { background: var(--accent); color: var(--accent-ink); text-align: center; padding: 10px 16px; font-weight: 700; }
+.oldicon a { color: var(--accent-ink); }
+
+@media (max-width: 520px) {
+  h2 { font-size: 1.7rem; }
+  .logo h1 { font-size: 2rem; }
+  .logo img { width: 54px; height: 54px; }
+  .btn.big { width: 100%; }
+  .switch .btn { font-size: 1.05rem; padding: 8px 10px; }
+}
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .btn { transition: none; } }
+</style>
+<script>/* config.js */
+// Firebase project used for family accounts (parent login and linked children's devices).
+// These web settings are public by design; firestore.rules protects the data.
+// Set to null to turn family accounts off.
+const PMLM_FIREBASE = {
+  apiKey: 'AIzaSyAPyBDEqkixMqNYeIut-ZtXCER4YG6reBQ',
+  authDomain: 'playmorelearnmore.firebaseapp.com',
+  projectId: 'playmorelearnmore',
+  storageBucket: 'playmorelearnmore.firebasestorage.app',
+  messagingSenderId: '891444609113',
+  appId: '1:891444609113:web:642128505c6340720f3148',
+  measurementId: 'G-51Y7VFGZGB',
+};
+
+// Which copy this is. `python3 build.py --preview` builds from config.preview.js instead, which says 'preview':
+// that copy keeps its own storage on the device (keys start with pmlm-preview.) and uses the staging project.
+const PMLM_ENV = 'live';
+// Online extras for the family test (src/online.js). Set one to false to switch it off without a rollback.
+const PMLM_FEATURES = { stats: true, feedback: true, leaderboard: true, reminders: true, invites: true, crowd: true };
+// Public key for daily reminders (Web Push), written by tools/admin/setup-push.mjs. Empty: reminders stay hidden.
+const PMLM_VAPID = 'BIzQyWxPqV1Cwj3PIbNEdwZyBNaF4RvJBa7qZxLoQMaMYcJlI2pNOy26ffZckF5GzjKDiG4D7YlIX9DB_-1A3A0';
+// The game's own address. The old addresses (rendorf.github.io/play-more-learn-more, and pmlm.uk, now the landing
+// page) send each device here with its progress (src/move.js), once this address serves move.json. Empty: no moving.
+const PMLM_MOVE_TO = 'https://play.pmlm.uk/';
+
+</script>
+<script>/* move.js */
+// Moving the game to its own address (PMLM_MOVE_TO, https://play.pmlm.uk/). The browser keeps saved progress per
+// address, so a device that opens an old address (rendorf.github.io/play-more-learn-more, or pmlm.uk, which is now
+// the landing page) carries its progress along in the new address's #move= fragment (never sent to any server),
+// and the new address merges it in. An old address only moves a device after checking that the new one really
+// serves the game (move.json, open to every address through _headers), so a child is never sent to a page that
+// isn't ready.
+const Move = (() => {
+  const TO = typeof PMLM_MOVE_TO !== 'undefined' ? PMLM_MOVE_TO : '';
+  const LIVE = typeof PMLM_ENV === 'undefined' || PMLM_ENV === 'live';
+  const KEY = typeof PMLM_ENV !== 'undefined' && PMLM_ENV === 'preview' ? 'pmlm-preview.' : 'pmlm.';
+  const HOST = TO ? new URL(TO).hostname : '';
+  // Old addresses: the GitHub copy under its path, and pmlm.uk at any path. Never the new address itself.
+  const FROM = [['rendorf.github.io', '/play-more-learn-more'], ['pmlm.uk', ''], ['www.pmlm.uk', '']];
+  const fromOld = loc => FROM.some(([host, path]) => loc.hostname === host && (!path || loc.pathname === path || loc.pathname.indexOf(path + '/') === 0));
+  const LOCAL_RE = /^(localhost|127\.0\.0\.1|\[::1\])$/;
+
+  // ---------- Packing progress into the link ----------
+  const b64u = bytes => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+  const unb64u = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.length % 4)) % 4)), c => c.charCodeAt(0));
+  const pipe = async (bytes, stream) => new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer());
+  // 'z.' + gzip when the browser can (most since 2023), otherwise 'j.' + plain JSON
+  async function encode(obj) {
+    const bytes = new TextEncoder().encode(JSON.stringify(obj));
+    if (typeof CompressionStream !== 'undefined') return 'z.' + b64u(await pipe(bytes, new CompressionStream('gzip')));
+    return 'j.' + b64u(bytes);
+  }
+  async function decode(s) {
+    const kind = s.slice(0, 2), bytes = unb64u(s.slice(2));
+    const raw = kind === 'z.' ? await pipe(bytes, new DecompressionStream('gzip')) : bytes;
+    return JSON.parse(new TextDecoder().decode(raw));
+  }
+
+  // Where this page should send the device, or null. loc: { hostname, pathname, search, hash }.
+  // On a local test server, ?moveto=<url> plays the old address so the browser tests can try the whole move.
+  function target(loc) {
+    const params = new URLSearchParams(loc.search), hash = (loc.hash || '').replace('#', '');
+    if (hash === 'selftest' || hash === 'debug' || /[?&]debug=1/.test(loc.search)) return null;
+    if (LOCAL_RE.test(loc.hostname) && params.get('moveto')) return { url: params.get('moveto'), test: true };
+    if (!LIVE || !TO || loc.hostname === HOST || !fromOld(loc)) return null;
+    params.delete('moveto');
+    params.delete('stay');
+    const q = params.toString();
+    return { url: TO + (q ? '?' + q : ''), test: false };
+  }
+
+  // Is the new address up and serving the game? (3 seconds at most)
+  async function ready(t) {
+    const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = setTimeout(() => ctl && ctl.abort(), 3000);
+    try {
+      const u = new URL('move.json', t.url).href;
+      if (t.test) { await fetch(u, { mode: 'no-cors', cache: 'no-store', signal: ctl && ctl.signal }); return true; }
+      const r = await fetch(u, { cache: 'no-store', signal: ctl && ctl.signal });
+      const j = r.ok ? await r.json() : null;
+      return !!(j && j.app === 'play-more-learn-more' && j.receives >= 1);
+    } catch (e) { return false; } finally { clearTimeout(timer); }
+  }
+
+  // What a device takes along, read straight from storage (the game and the landing page share it), or null when
+  // it has no players. Sign-ins stay behind: they belong to the old address, so linked devices link again.
+  function payload(store) {
+    const read = k => { try { return JSON.parse(store.getItem(KEY + k)); } catch (e) { return null; } };
+    const state = read('v1');
+    if (!state || state.v !== 1 || !Array.isArray(state.profiles) || !state.profiles.length) return null;
+    let family = false;
+    try { family = !!store.getItem(KEY + 'sync'); } catch (e) { /* storage blocked */ }
+    const p = read('push');
+    return { v: 1, state, family, push: p && p.on ? { hour: p.hour == null ? 17 : p.hour } : null };
+  }
+
+  return {
+    TO, HOST, target, encode, decode, ready, payload,
+    // Send this device to the new address with its progress (check ready() first). False if it stays here.
+    async go(payload, t) {
+      let code;
+      try { code = await encode(payload); } catch (e) { return false; }
+      location.replace(t.url.split('#')[0] + '#move=' + code);
+      return true;
+    },
+    // On the new address: the progress that came in the link (and the link is cleaned up), or null
+    async arrive() {
+      const m = /^#move=([zj]\.[A-Za-z0-9_-]+)$/.exec(location.hash);
+      if (!m) return null;
+      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* the fragment stays visible */ }
+      try { return await decode(m[1]); } catch (e) { console.warn('Moved progress could not be read', e); return null; }
+    },
+  };
+})();
+
+</script>
+<script>/* landing.js */
+// The landing page at pmlm.uk (welcome.html). pmlm.uk used to serve the game itself, so before drawing anything the
+// page decides what this device needs: a device that played here moves on to the game's own address with its progress
+// (src/move.js), an iPhone/iPad Home Screen app gets its progress as a code (those apps keep their own storage), and
+// everyone else just sees the page. The copy on pmlm.uk is never deleted, so it stays as a safety net.
+const Landing = (() => {
+  const KEY = typeof PMLM_ENV !== 'undefined' && PMLM_ENV === 'preview' ? 'pmlm-preview.' : 'pmlm.';
+  const PLAY = typeof PMLM_MOVE_TO !== 'undefined' && PMLM_MOVE_TO ? PMLM_MOVE_TO : './';
+  const OLD_HOSTS = ['pmlm.uk', 'www.pmlm.uk'];
+
+  // What one device's saved progress looks like, so a move is only sent again when something changed since
+  const keyOf = state => `${state.updatedAt || 0}:${state.profiles.length}`;
+  const readMarker = store => { try { return JSON.parse(store.getItem(KEY + 'moved')); } catch (e) { return null; } };
+
+  // What to do, from the address, the device's storage and whether this is an installed Home Screen app.
+  // Returns { act, url?, payload?, t? } with act one of:
+  //   show     just show the page
+  //   forward  go to the game without progress (url)
+  //   move     carry the progress to the game (payload, t), after checking the game's address is ready
+  //   code     iPhone/iPad Home Screen app with progress: the copy-your-code steps (payload), once t answers
+  //   oldicon  iPhone/iPad Home Screen app with nothing saved: show the page and say this icon is old
+  function decide(loc, store, app) {
+    const params = new URLSearchParams(loc.search), hash = loc.hash || '';
+    const onOld = OLD_HOSTS.indexOf(loc.hostname) >= 0;
+    // An old tab of the GitHub game already packed the progress for pmlm.uk: pass it on untouched
+    if (/^#move=/.test(hash) && (onOld || params.get('moveto'))) return { act: 'forward', url: (params.get('moveto') || PLAY).split('?')[0].split('#')[0] + hash };
+    // The owner's #debug / #selftest bookmarks keep opening the game
+    if (onOld && (/^#(debug|selftest)$/.test(hash) || params.get('debug') === '1')) return { act: 'forward', url: PLAY + loc.search + hash };
+    const t = Move.target(loc);
+    if (!t) return { act: 'show' };
+    const payload = Move.payload(store);
+    if (app && app.ios) return payload ? { act: 'code', payload, t } : { act: 'oldicon' };
+    if (!payload) return params.get('invite') ? { act: 'forward', url: t.url } : { act: 'show' };
+    const m = readMarker(store);
+    // Moved before and nothing changed since: a Home Screen app goes straight to the game, a browser shows the page
+    if (m && m.key === keyOf(payload.state)) return app && app.standalone ? { act: 'forward', url: t.url } : { act: 'show' };
+    return { act: 'move', payload, t };
+  }
+
+  // Reminders from this old address would come twice once they are turned on again in the game. Turning this
+  // browser's subscription off is enough: the sender drops subscriptions that stop working.
+  async function stopOldReminders(store) {
+    try {
+      const p = JSON.parse(store.getItem(KEY + 'push'));
+      if (p && p.on) store.setItem(KEY + 'push', JSON.stringify(Object.assign(p, { on: false })));
+      const reg = navigator.serviceWorker && (await navigator.serviceWorker.getRegistration());
+      const sub = reg && (await reg.pushManager.getSubscription());
+      if (sub) await sub.unsubscribe();
+    } catch (e) { /* nothing to turn off */ }
+  }
+
+  async function move(d, store) {
+    if (!(await Move.ready(d.t))) return false;
+    if (d.payload.push) await stopOldReminders(store);
+    try { store.setItem(KEY + 'moved', JSON.stringify({ key: keyOf(d.payload.state), t: Date.now() })); } catch (e) { /* storage blocked */ }
+    return Move.go(d.payload, d.t);
+  }
+
+  return { PLAY, decide, move, keyOf };
+})();
+
+</script>
+<script>
+// Decide before anything is drawn: move this device on, forward it, or show the page (src/landing.js)
+(function () {
+  var app = { standalone: navigator.standalone === true || !!(window.matchMedia && matchMedia('(display-mode: standalone)').matches), ios: navigator.standalone === true };
+  var d;
+  try { d = Landing.decide(location, localStorage, app); } catch (e) { d = { act: 'show' }; }
+  window.__landing = d;
+  document.documentElement.className += ' js';
+  if (d.act === 'forward') { document.documentElement.className += ' busy'; location.replace(d.url); }
+  else if (d.act === 'move' || d.act === 'code') document.documentElement.className += ' busy';
+})();
+</script>
+</head>
+<body>
+<div class="oldicon" id="oldicon" hidden>This icon is from the game's old address. Open <a href="https://play.pmlm.uk/">play.pmlm.uk</a> in Safari and add it to your Home Screen, then delete this icon.</div>
+
+<div class="panel" id="moving" hidden>
+  <h2>🚀 Moving to play.pmlm.uk…</h2>
+  <p class="muted" style="margin-top:12px">The game has its own address now. Your progress comes along.</p>
+</div>
+<div class="panel stack" id="stuck" hidden>
+  <h2>Your progress is safe on this device</h2>
+  <p>The game's new address, <b>play.pmlm.uk</b>, didn't answer just now, so nothing has moved yet.</p>
+  <p><button class="btn primary" id="retry">Try again</button></p>
+  <p><a class="btn small" href="/?stay=1">Keep playing here</a></p>
+</div>
+<div class="panel stack" id="codepanel" hidden>
+  <h2>🏠 Your game has a new home</h2>
+  <p>The game moved to <b>play.pmlm.uk</b>. This Home Screen icon keeps its progress to itself, so a grown-up moves it in four steps:</p>
+  <ol class="plain">
+    <li>Tap <b>📋 Copy progress code</b> below.</li>
+    <li>In <b>Safari</b>, open <b>play.pmlm.uk</b>, tap Share ⬆️ and <b>Add to Home Screen</b>.</li>
+    <li>Open the <b>new</b> icon, tap <b>📦 Moving from the old app?</b> and paste the code. Check your players are there. (Already made a player there? Use Parents → 💾 Backup → paste → <b>Add these players</b>.)</li>
+    <li>Only then delete this old icon.</li>
+  </ol>
+  <p><button class="btn primary big" id="copycode">📋 Copy progress code</button></p>
+  <p class="muted" id="copied" hidden>Copied! Now open play.pmlm.uk in Safari.</p>
+  <textarea id="codeout" readonly hidden aria-label="Progress code"></textarea>
+  <p><a href="#" id="readpage">Read how the game works</a></p>
+</div>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="logo"><img src="icons/icon-192.png" alt=""><h1>Play More <span>Learn More</span></h1></div>
+    <p class="tagline">A free, playful maths game for the Cambridge curriculum, Grades 1 to 9. Short lessons, hints when you need them, and real wishes to unlock.</p>
+    <a class="btn primary big" href="https://play.pmlm.uk/" data-play>▶ Play now</a>
+    <div class="facts"><span>Free</span><span>No ads</span><span>Phones, tablets and computers</span><span>201 skills</span><span>Cambridge Stages 1–9</span></div>
+  </div>
+</header>
+
+<nav class="switch" aria-label="Who is reading">
+  <div class="wrap">
+    <a class="btn" href="#kids" data-part="kids">🧒 For kids</a>
+    <a class="btn" href="#grownups" data-part="grownups">👪 For grown-ups</a>
+  </div>
+</nav>
+
+<main>
+<section class="part kids" id="kids">
+  <div class="wrap">
+    <h2>How to play</h2>
+    <p class="lead">Learn a skill, practise it, earn stars. Come back every day to keep your streak and unlock your wishes!</p>
+    <ol class="steps">
+      <li class="step"><h3>Make your player</h3>
+        <p>Tap <b>Add a player</b>. Type your name, pick an animal, your grade and a world: Space, Ocean, Jungle or Candy. Then tap <b>Start playing</b>.</p>
+        <div class="shot"><img src="landing/kids-new-player.jpg" alt="The New player screen: a name, an animal, a grade and a world to pick" loading="lazy"></div></li>
+      <li class="step"><h3>Pick a skill on the map</h3>
+        <p>Your map shows every skill in your grade. The big button at the top is a good one to do next.</p>
+        <div class="shot"><img src="landing/kids-map.jpg" alt="The Play tab: the streak, the pet, the progress ring and the big button for the next skill" loading="lazy"></div></li>
+      <li class="step"><h3>Learn it</h3>
+        <p>Tap <b>📖 Learn</b> for a few picture cards. Tap <b>🔊</b> and the game reads them to you.</p>
+        <div class="shot"><img src="landing/kids-learn.jpg" alt="A lesson card with a picture and a Next button" loading="lazy"></div></li>
+      <li class="step"><h3>Practise</h3>
+        <p>Tap <b>▶ Practise</b> for 10 questions. Type your answer on the keypad and tap <b>Check ✓</b>.</p>
+        <div class="shot"><img src="landing/kids-question.jpg" alt="A practice question with the number keypad" loading="lazy"></div></li>
+      <li class="step"><h3>Stuck? That's OK!</h3>
+        <p>Get it wrong and you get a <b>💡 hint</b>, then a step to help you. Hints are free! A question you miss comes back later in <b>🔧 Fix-it</b>, so you can beat it.</p>
+        <div class="shot"><img src="landing/kids-hint.jpg" alt="Not quite. Try again! with a hint below the question" loading="lazy"></div></li>
+      <li class="step"><h3>Earn stars</h3>
+        <p>Get answers right first time to earn ⭐ and ⭐⭐. The third star ⭐⭐⭐ means you've <b>mastered</b> the skill: 8 of your last 10 right first time, on 2 different days. Star every skill in a unit to fight the <b>boss</b>!</p>
+        <div class="shot"><img src="landing/kids-stars.jpg" alt="The Round complete! screen with stars, brain power and coins" loading="lazy"></div></li>
+      <li class="step"><h3>Come back every day</h3>
+        <p>Finish today's rounds to grow your <b>🔥 streak</b>, open the <b>🎁 treasure chest</b> and help your pet grow. Spend your <b>🪙 coins</b> on avatars and hats on the <b>Me</b> tab.</p>
+        <div class="shot"><img src="landing/kids-chest.jpg" alt="Today's streak, the pet and the treasure chest" loading="lazy"></div></li>
+      <li class="step"><h3>Unlock your wishes</h3>
+        <p>A grown-up adds real wishes, like an ice cream trip. Master skills to fill the bar. When a wish unlocks: <b>show a grown-up!</b> 🎉</p>
+        <div class="shot"><img src="landing/kids-wish.jpg" alt="The Wishes tab with a wish and its progress bar" loading="lazy"></div></li>
+    </ol>
+    <h3 class="sectiontitle">More things to try</h3>
+    <div class="tips">
+      <div class="tip"><b>🧭 Find my level</b><br>One question from every skill. Get it right and you skip ahead.</div>
+      <div class="tip"><b>⚡ 60-second challenge</b><br>Got 2 stars on a skill? See how many you can get right in a minute.</div>
+      <div class="tip"><b>🌍 Worlds and 🎵 music</b><br>Change your world and your music on the <b>Me</b> tab.</div>
+      <div class="tip"><b>📒 Sticker album</b><br>Every skill you master gives you a sticker. Fill a page for bonus coins.</div>
+    </div>
+    <div class="shot" style="max-width:330px;margin:22px auto 0"><img src="landing/kids-me.jpg" alt="The Me tab: level, stats, sticker album and worlds" loading="lazy"></div>
+    <p class="cta"><a class="btn primary big" href="https://play.pmlm.uk/" data-play>▶ Let's play!</a></p>
+  </div>
+</section>
+
+<section class="part grownups" id="grownups">
+  <div class="wrap">
+    <h2>For grown-ups</h2>
+    <p class="lead">Start on one device in a minute with no account. Add a free family account when you want every child's progress in one place, on every device.</p>
+
+    <h3 class="sectiontitle">Get started</h3>
+    <ol class="steps">
+      <li class="step"><h3>Add your child</h3>
+        <p>On the device your child plays on, open <b>play.pmlm.uk</b> and tap <b>Add a player</b>. No account needed.</p>
+        <div class="shot"><img src="landing/kids-welcome.jpg" alt="The welcome screen with Add a player, Link to my family and Parent login" loading="lazy"></div></li>
+      <li class="step"><h3>The 1-minute setup</h3>
+        <p>Straight after, <b>👋 Grown-ups: 1-minute setup</b> appears. Set a <b>4-digit parent PIN</b> so wishes and settings stay for grown-ups, add a wish, put the game on the Home Screen and turn on a daily reminder.</p>
+        <div class="shot"><img src="landing/grown-setup.jpg" alt="The Grown-ups: 1-minute setup sheet" loading="lazy"></div></li>
+      <li class="step"><h3>Add wishes</h3>
+        <p>In <b>Parents 🔒 → 🎁 Wishes</b>, small wishes unlock at 25, 50 and 75% of the grade, and a big wish when your child finishes it. Tap <b>Mark as granted</b> once you've given it.</p>
+        <div class="shot"><img src="landing/grown-wishes.jpg" alt="The wishes form with wishes at 25%, 50%, 75% and the big wish" loading="lazy"></div></li>
+    </ol>
+
+    <h3 class="sectiontitle">Several children or devices? Make a family account</h3>
+    <p class="muted" style="margin-top:6px">Free. Every child's progress is saved online and you can see it from your own phone.</p>
+    <ol class="steps">
+      <li class="step"><h3>Log in on your own phone</h3>
+        <p>Open <b>play.pmlm.uk</b> and tap <b>👤 Parent login</b> (or Parents → ☁️ Family account). <b>Create account</b> with an email and password, or <b>Continue with Google</b>. Your family is made, and players already on that device join it.</p>
+        <div class="shot"><img src="landing/grown-login.jpg" alt="The Parent login sheet with email, password, Create account and Continue with Google" loading="lazy"></div></li>
+      <li class="step"><h3>Get a link code</h3>
+        <p>On your phone: <b>Parents → 🔗 Devices and parents → Link a child's device</b>. A code like <b>ABCD-EFGH</b> appears. It works for 30 minutes.</p>
+        <div class="shot"><img src="landing/grown-code.jpg" alt="Devices and parents showing a link code" loading="lazy"></div></li>
+      <li class="step"><h3>Link your child's device</h3>
+        <p>On the child's device: <b>🔗 Link to my family</b>, type the code, name the device and tap <b>Link this device</b>. Children never need a password. If the same child is already in your family, it asks <b>"Is this the same …?"</b> so the progress is combined, not doubled.</p>
+        <div class="shot"><img src="landing/grown-link.jpg" alt="The Link to my family sheet with a code and the device's name" loading="lazy"></div></li>
+      <li class="step"><h3>Lock a device to one child</h3>
+        <p>In <b>Devices and parents</b>, set a device to <b>🔒 Plays as:</b> your child. It then always opens as that child, and switching player needs the PIN.</p>
+        <div class="shot"><img src="landing/grown-lock.jpg" alt="A linked device set to Plays as one child" loading="lazy"></div></li>
+    </ol>
+    <div class="note"><b>Tip:</b> log in as a parent on <b>your own</b> phone, not on a child's device: a parent login opens the Parents area without the PIN. A second parent joins with <b>Invite another parent</b> in Devices and parents (that code works for 24 hours).</div>
+
+    <h3 class="sectiontitle">What you can control</h3>
+    <p class="muted" style="margin-top:6px">All in the <b>Parents 🔒</b> tab.</p>
+    <div class="grid">
+      <div class="ctl"><h3>📅 Reports</h3><p>This week and last week: rounds, minutes, new stars. Progress by skill, what needs most help, and recent mistakes.</p></div>
+      <div class="ctl"><h3>🎁 Wishes</h3><p>Rewards for progress through the grade, and 🔥 streak wishes for 7, 14 and 30 days in a row.</p></div>
+      <div class="ctl"><h3>🎯 Daily goal</h3><p>1, 2 or 3 rounds a day count as a done day, for streaks and the chest.</p></div>
+      <div class="ctl"><h3>🤝 Family team goal</h3><p>All your children's rounds this week fill one bar, with a reward you choose.</p></div>
+      <div class="ctl"><h3>👧 Players</h3><p>Change a grade, add or delete a player, and combine a child who was added twice.</p></div>
+      <div class="ctl"><h3>🏅 Leaderboard name <span class="tag">family test</span></h3><p>A fun made-up nickname, the first name, or hidden.</p></div>
+      <div class="ctl"><h3>🔔 Daily reminder <span class="tag">family test</span></h3><p>A friendly nudge at the time you pick, only on days nobody has played. On iPhone it needs the Home Screen app.</p></div>
+      <div class="ctl"><h3>🔊 Sound and music</h3><p>Sound effects, background music, volume and the button sound.</p></div>
+      <div class="ctl"><h3>🔑 PIN</h3><p>Change it any time. Forgot it? A grown-up maths question lets you set a new one.</p></div>
+      <div class="ctl"><h3>💾 Backup</h3><p>A code or file that moves players to another device without an account.</p></div>
+      <div class="ctl"><h3>💬 Feedback</h3><p>🐞 Report a problem, tell us what you think, or tap 🚩 on any question that looks wrong.</p></div>
+      <div class="ctl"><h3>💱 Money symbol</h3><p>Questions about money use your currency: ₼ $ £ € ₽ ₺ ₹.</p></div>
+    </div>
+
+    <h3 class="sectiontitle">Safe for children</h3>
+    <div class="safe">
+      <div><b>No ads, no chat.</b> Children can't message each other.</div>
+      <div><b>Nothing to buy.</b> Coins are earned by playing, never with real money.</div>
+      <div><b>Private by default.</b> Progress is saved on the device. With a family account, only your family's parents and linked devices can read it.</div>
+      <div><b>Anonymous stats.</b> Play stats use random ids, never names. Switch them off in Parents → Settings.</div>
+    </div>
+
+    <h3 class="sectiontitle">Questions</h3>
+    <details><summary>How do I put the game on the Home Screen?</summary>
+      <p><b>iPhone and iPad:</b> open play.pmlm.uk in Safari, tap Share ⬆️, then <b>Add to Home Screen</b> and <b>Add</b>. Safari can clear a website's data after a week without a visit, but not a Home Screen app, and reminders need it too.</p>
+      <p><b>Android:</b> Parents → 📲 Home Screen → <b>Install the game</b>, or the browser menu ⋮ → Install app.</p></details>
+    <details><summary>We played on pmlm.uk or the old GitHub address. Is our progress safe?</summary>
+      <p>Yes. Open the old address in the same browser and it moves your progress to play.pmlm.uk by itself. An old Home Screen icon on iPhone or iPad shows a <b>Copy progress code</b> button and four steps instead.</p>
+      <p>Sign-ins stay at the old address, so a parent logs in again and each linked device is linked again with a new code. Then set <b>🔒 Plays as</b> and turn reminders on again.</p></details>
+    <details><summary>I forgot the parent PIN.</summary>
+      <p>In the Parents tab, tap <b>Forgot the PIN?</b>. Answer a grown-up maths question, then choose a new PIN.</p></details>
+    <details><summary>Does it work without internet?</summary>
+      <p>Once the game is open, yes, and progress is saved on the device as your child plays. Opening it needs a connection. A family account uploads progress when the device is back online.</p></details>
+    <details><summary>Which grades and topics does it cover?</summary>
+      <p>The Cambridge curriculum for Primary Stages 1 to 6 and Lower Secondary Stages 7 to 9: 48 units and 201 skills, from counting to algebra. Every skill can be practised at any time.</p></details>
+    <details><summary>Is it really free?</summary>
+      <p>Yes. There are no ads and nothing to buy. The game is in a friends-and-family test, so some extras (the leaderboard, reminders, inviting friends) may change.</p></details>
+    <p class="cta"><a class="btn primary big" href="https://play.pmlm.uk/" data-play>▶ Open the game</a></p>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Play More Learn More · Cambridge maths practice, Grades 1 to 9 · version 2026-10-28 10:20 UTC</div>
+</footer>
+
+<script>
+(function () {
+  var d = window.__landing || { act: 'show' }, root = document.documentElement;
+  // Keep an invite wave's ?src= on the Play buttons
+  var src = new URLSearchParams(location.search).get('src');
+  if (src) [].forEach.call(document.querySelectorAll('[data-play]'), function (a) { a.href += (a.href.indexOf('?') < 0 ? '?' : '&') + 'src=' + encodeURIComponent(src); });
+
+  // For kids / For grown-ups: one part at a time with JavaScript (both show without it); #grownups opens that part
+  function pick(part, scroll) {
+    [].forEach.call(document.querySelectorAll('.part'), function (s) { s.className = s.className.replace(/ on\b/g, '') + (s.id === part ? ' on' : ''); });
+    [].forEach.call(document.querySelectorAll('[data-part]'), function (b) { var on = b.getAttribute('data-part') === part; b.className = b.className.replace(/ on\b/g, '') + (on ? ' on' : ''); b.setAttribute('aria-current', on ? 'true' : 'false'); });
+    if (scroll) document.querySelector('.switch').scrollIntoView({ behavior: 'smooth' });
+  }
+  pick(location.hash === '#grownups' ? 'grownups' : 'kids', false);
+  window.addEventListener('hashchange', function () { if (location.hash === '#grownups' || location.hash === '#kids') pick(location.hash.slice(1), false); });
+  [].forEach.call(document.querySelectorAll('[data-part]'), function (b) {
+    b.addEventListener('click', function (e) { e.preventDefault(); var p = b.getAttribute('data-part'); pick(p, true); try { history.replaceState(null, '', '#' + p); } catch (err) { /* fine */ } });
+  });
+
+  function showPage() { root.className = root.className.replace(/ busy\b/g, ''); ['moving', 'stuck', 'codepanel'].forEach(function (id) { document.getElementById(id).hidden = true; }); }
+
+  if (d.act === 'oldicon') document.getElementById('oldicon').hidden = false;
+  if (d.act === 'move') {
+    var go = function () {
+      document.getElementById('stuck').hidden = true;
+      document.getElementById('moving').hidden = false;
+      Landing.move(d, localStorage).then(function (ok) {
+        if (ok) return;
+        document.getElementById('moving').hidden = true;
+        document.getElementById('stuck').hidden = false;
+      });
+    };
+    document.getElementById('retry').addEventListener('click', go);
+    go();
+  }
+  // Only point an iPhone app at the new address once it really serves the game; until then just show the page
+  if (d.act === 'code') Move.ready(d.t).then(function (ok) { if (ok) showCode(); else showPage(); });
+  function showCode() {
+    var raw = '';
+    try { raw = localStorage.getItem((typeof PMLM_ENV !== 'undefined' && PMLM_ENV === 'preview' ? 'pmlm-preview.' : 'pmlm.') + 'v1') || ''; } catch (e) { /* storage blocked */ }
+    document.getElementById('codepanel').hidden = false;
+    var out = document.getElementById('codeout');
+    var show = function () { out.value = raw; out.hidden = false; out.focus(); out.select(); };
+    document.getElementById('copycode').addEventListener('click', function () {
+      try { navigator.clipboard.writeText(raw).then(function () { document.getElementById('copied').hidden = false; }, show); } catch (e) { show(); }
+    });
+    document.getElementById('readpage').addEventListener('click', function (e) { e.preventDefault(); showPage(); });
+  }
+})();
+</script>
+</body>
+</html>

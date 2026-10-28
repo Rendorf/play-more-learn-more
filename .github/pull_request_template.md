@@ -20,6 +20,9 @@ Merge only when every box is ticked. Children's progress must never be lost.
 - [ ] 🔔 Daily reminder: turned on (from the Home Screen app on iPhone), "Show a sample" appears, and a real reminder arrives (`node tools/admin/send-reminders.mjs --env staging --only <device id>`)
 - [ ] Family account on the preview: parent login, link a second device, both see the same progress
 
+**Cloudflare copy** (optional; for changes to the landing page, `functions/`, `_headers` or the deploy)
+- [ ] Label `preview` and check the pages.dev copy from the Deploy run's summary: the landing page at `/welcome`, the game only with `#debug` (it uses the live project)
+
 **Live project, before pressing Merge** (only when this pull request changes them)
 - [ ] Backup taken: `node tools/admin/backup-firestore.mjs --key ~/.config/pmlm/live-service-account.json`
 - [ ] New `firestore.rules` published in the Firebase console (live project)
@@ -27,7 +30,9 @@ Merge only when every box is ticked. Children's progress must never be lost.
 - [ ] Rebased on the latest `main`, and the tests are green again
 
 **After merging**
-- [ ] `curl -s https://pmlm.uk/ | grep "const BUILD"` shows the new version (and the same for the old address, which moves devices on)
+- [ ] Deploy workflow green on `main` (Actions → Deploy; it runs after the Tests pass on `main`)
+- [ ] `curl -s https://play.pmlm.uk/ | grep "const BUILD"` shows the new version (and the same for the old address, https://rendorf.github.io/play-more-learn-more/, which moves devices on)
+- [ ] `curl -s https://pmlm.uk/ | grep pmlm-page` shows the landing page
 - [ ] On your own phone: a round, the leaderboard, stats.html, and a test reminder (Actions → Daily reminders → Run workflow with your device id)
 
-If anything is wrong: `git revert -m 1 <merge commit>` and push (the old version is back in 1–2 minutes and keeps all progress), or switch one feature off in `PMLM_FEATURES` in `src/config.js`.
+If anything is wrong: Cloudflare → the Pages project → Deployments → **Rollback** to the last good one (at once, until the next deploy), then `git revert -m 1 <merge commit>` through a pull request (it keeps all progress), or switch one feature off in `PMLM_FEATURES` in `src/config.js`.

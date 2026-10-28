@@ -4,14 +4,16 @@
 Writes:
   index.html            full document, works offline; GitHub Pages serves it
   stats.html            the family-test dashboard (src/stats.html with the Firebase config inlined)
+  welcome.html          the landing page at pmlm.uk (src/landing.html with config.js, move.js and landing.js inlined;
+                        functions/index.js serves it at pmlm.uk/, its pictures are in landing/)
   build/artifact.html   page content only, for publishing as a claude.ai Artifact
 
 Options:
   --preview   build the preview copy into build/preview/ instead: settings from src/config.preview.js (the
               staging Firebase project and its own storage keys on the device) and a PREVIEW ribbon.
               tools/deploy-preview.sh publishes it.
-  --check     build in memory and fail if index.html or stats.html are not up to date with src/
-              (the build stamp is ignored). The tests run this.
+  --check     build in memory and fail if index.html, stats.html or welcome.html are not up to date with src/
+              (the build stamp is ignored), or a landing page picture is missing or too big. The tests run this.
 """
 import json
 import re
@@ -25,6 +27,9 @@ SRC = ROOT / "src"
 ORDER = ["config.js", "util.js", "registry.js", "validate.js",
          *[f"grade{g}.js" for g in range(1, 10)],
          "visuals.js", "fx.js", "music.js", "board.js", "reminders.js", "online.js", "merge.js", "move.js", "engine.js"]
+LANDING_JS = ["config.js", "move.js", "landing.js"]
+LANDING_IMG = re.compile(r'src="(landing/[^"]+)"')
+MAX_IMG_KB = 200
 STAMP = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC")  # the build time, ignored by --check
 APP_HEAD = """<link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
@@ -49,9 +54,9 @@ MANIFEST = {
 }
 
 
-def scripts(config_name, build):
+def scripts(config_name, build, order=ORDER):
     out = []
-    for name in ORDER:
+    for name in order:
         path = SRC / (config_name if name == "config.js" else name)
         if not path.exists():
             print(f"  (skipping missing {name})")
@@ -81,10 +86,26 @@ def pages(preview, build):
     )
     config = (SRC / config_name).read_text(encoding="utf-8")
     stats = (SRC / "stats.html").read_text(encoding="utf-8").replace("<!--CONFIG-->", f"<script>\n{config}</script>").replace("__BUILD__", build)
-    out = {"index.html": full, "stats.html": stats}
+    play = re.search(r"const PMLM_MOVE_TO = '([^']*)'", config)
+    welcome = ((SRC / "landing.html").read_text(encoding="utf-8")
+               .replace("<!--SCRIPTS-->", scripts(config_name, build, LANDING_JS))
+               .replace("__PLAY__", (play and play.group(1)) or "./").replace("__BUILD__", build))
+    out = {"index.html": full, "stats.html": stats, "welcome.html": welcome}
     if not preview:
         out["build/artifact.html"] = head.strip() + "\n" + body.strip() + "\n"
     return out
+
+
+def landing_images():
+    """Pictures the landing page uses that are missing or too big to load quickly on a phone."""
+    bad = []
+    for rel in sorted(set(LANDING_IMG.findall((SRC / "landing.html").read_text(encoding="utf-8")))):
+        path = ROOT / rel
+        if not path.exists():
+            bad.append(f"{rel} is missing")
+        elif path.stat().st_size > MAX_IMG_KB * 1024:
+            bad.append(f"{rel} is over {MAX_IMG_KB} KB")
+    return bad
 
 
 def manifest(preview):
@@ -112,7 +133,11 @@ def main():
         if stale:
             print("Not up to date with src/: " + ", ".join(stale) + ". Run python3 build.py and commit the result.")
             sys.exit(1)
-        print("index.html, stats.html and manifest.webmanifest are up to date with src/")
+        bad = landing_images()
+        if bad:
+            print("Landing page pictures: " + "; ".join(bad) + ". Run cd tests && npm run shots and commit landing/.")
+            sys.exit(1)
+        print("index.html, stats.html, welcome.html and manifest.webmanifest are up to date with src/")
         return
 
     if "--preview" in args:
@@ -125,6 +150,8 @@ def main():
         (out_dir / "manifest.webmanifest").write_text(manifest(True), encoding="utf-8")
         shutil.copy(ROOT / "sw.js", out_dir / "sw.js")
         shutil.copytree(ROOT / "icons", out_dir / "icons")
+        if (ROOT / "landing").exists():
+            shutil.copytree(ROOT / "landing", out_dir / "landing")
         (out_dir / ".nojekyll").write_text("", encoding="utf-8")
         if "const PMLM_FIREBASE = null" in (SRC / "config.preview.js").read_text(encoding="utf-8"):
             print("  Note: src/config.preview.js has no staging Firebase project yet, so the preview has no online features.")
@@ -136,7 +163,7 @@ def main():
         (ROOT / rel).write_text(text, encoding="utf-8")
     (ROOT / "manifest.webmanifest").write_text(manifest(False), encoding="utf-8")
     size = (ROOT / "index.html").stat().st_size // 1024
-    print(f"Built index.html ({size} KB), stats.html, manifest.webmanifest and build/artifact.html")
+    print(f"Built index.html ({size} KB), stats.html, welcome.html, manifest.webmanifest and build/artifact.html")
 
 
 if __name__ == "__main__":

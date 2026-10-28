@@ -2,11 +2,11 @@
 
 **Who this is for:** designers, testers and partners who want to walk through the main journeys step by step, and developers checking where each step lives in the code.
 
-**Last checked against:** BUILD 2026-10-25 18:32 UTC.
+**Last checked against:** BUILD 2026-10-28 10:20 UTC.
 
-Screens and copy are in `src/engine.js` (functions `render…` and the `ACT` actions). Words in quotes are the real labels on screen. Flowcharts use Mermaid.
+Screens and copy are in `src/engine.js` (functions `render…` and the `ACT` actions); the landing page is in `src/landing.html` and `src/landing.js`. Words in quotes are the real labels on screen. Flowcharts use Mermaid.
 
-**Contents:** [First run and placement](#1-first-run-and-placement) · [Practice round and hint ladder](#2-a-practice-round-and-the-hint-ladder) · [Boss battle](#3-boss-battle) · [Wishes](#4-wishes-set-unlock-grant) · [Grown-up quick start and PIN](#5-grown-up-quick-start-and-pin) · [Parent login and linking](#6-parent-login-and-linking-a-childs-device) · [Leaderboard privacy](#7-leaderboard-privacy-choice) · [Reminders](#8-turning-on-reminders) · [Invite a friend](#9-invite-a-friend)
+**Contents:** [First run and placement](#1-first-run-and-placement) · [Practice round and hint ladder](#2-a-practice-round-and-the-hint-ladder) · [Boss battle](#3-boss-battle) · [Wishes](#4-wishes-set-unlock-grant) · [Grown-up quick start and PIN](#5-grown-up-quick-start-and-pin) · [Parent login and linking](#6-parent-login-and-linking-a-childs-device) · [Leaderboard privacy](#7-leaderboard-privacy-choice) · [Reminders](#8-turning-on-reminders) · [Invite a friend](#9-invite-a-friend) · [The landing page](#10-the-landing-page) · [Moving to play.pmlm.uk](#11-moving-to-playpmlmuk)
 
 ## The app at a glance
 
@@ -215,7 +215,7 @@ Only when the reminder key is set up. Off by default on every device.
 4. Pick a **Time** (08:00 to 20:00, default 17:00) → **🔔 Turn on reminders** → the browser asks for permission.
 5. Allowed: "Daily reminder is on 🔔". The card then offers **Show a sample**, **Turn off**, and the time picker.
 6. Blocked: "Notifications are blocked for this game. Allow them in the browser or phone settings, then try again."
-7. **When messages are sent:** at the chosen hour, only on days nobody on the device has played; daily for 3 missed days, then every 3rd day, and never after 14 days. Tapping a notification opens the game.
+7. **When messages are sent:** at the chosen hour, only on days nobody on the device has played; daily for 3 missed days, then every 3rd day, and never after 14 days. Tapping a notification opens the address the reminder was turned on at: the game, or for a device that turned it on at pmlm.uk before the move, the landing page, which sends it on (flow 11).
 
 ```mermaid
 flowchart TD
@@ -251,4 +251,73 @@ sequenceDiagram
   B->>B: +50 coins welcome gift
   A->>S: Me tab checks who came
   S-->>A: Friend played: +100 coins (max 10 friends)
+```
+
+## 10. The landing page
+
+https://pmlm.uk/ explains the game to children and grown-ups. The game itself is at https://play.pmlm.uk/.
+
+1. Before anything is drawn, the page checks whether this device played on pmlm.uk when it served the game, and moves it on if so (see [flow 11](#11-moving-to-playpmlmuk)). A friend's invite link on a device with no players goes straight to the game. Everyone else sees the page.
+2. **Top:** the logo, "A free, playful maths game for the Cambridge curriculum, Grades 1 to 9…", a big **▶ Play now** button, and chips: Free, No ads, Phones, tablets and computers, 201 skills, Cambridge Stages 1–9.
+3. **A sticky switch:** **🧒 For kids** / **👪 For grown-ups**. One part shows at a time, For kids first; a link ending in `#grownups` opens the grown-ups part. Without JavaScript both parts show.
+4. **For kids, "How to play":** eight steps, each with a picture from the game: Make your player, Pick a skill on the map, Learn it, Practise, Stuck? That's OK!, Earn stars, Come back every day, Unlock your wishes. Then "More things to try" and **▶ Let's play!**
+5. **For grown-ups:** Get started (add your child, the 1-minute setup, wishes); a family account in four steps (log in on your own phone, get a link code, link your child's device, lock a device to one child); "What you can control" in Parents; "Safe for children"; Questions (Home Screen, moving from the old address, forgotten PIN, offline, grades, cost); **▶ Open the game**.
+6. Every Play button opens play.pmlm.uk and keeps an invite wave's `?src=` tag.
+
+```mermaid
+flowchart TD
+  O[Open pmlm.uk] --> D{Played the game here before?}
+  D -->|yes| MV[Move to play.pmlm.uk, see flow 11]
+  D -->|no players, friend's invite link| G[play.pmlm.uk with the invite]
+  D -->|no| P[Landing page: Play now]
+  P --> SW{Switch}
+  SW -->|For kids| K[How to play: 8 steps with pictures]
+  SW -->|For grown-ups| GU[Get started, family account, controls, safety, questions]
+  K -->|Let's play| PLAY[play.pmlm.uk]
+  GU -->|Open the game| PLAY
+  P -->|Play now| PLAY
+```
+
+## 11. Moving to play.pmlm.uk
+
+Browsers keep progress per address, so a device that played at an old address (pmlm.uk, or the GitHub address before that) carries its players to play.pmlm.uk once. A browser moves only when play.pmlm.uk answers, and the old copy stays on the device. Copy is in `src/landing.html` (pmlm.uk) and `src/engine.js` (the old GitHub game and the arrival on play.pmlm.uk).
+
+**In a browser** (any phone, tablet or computer; also an installed app on Android or a computer, which shares the browser's storage)
+
+1. The device opens pmlm.uk (or the old GitHub address) in the browser it played in.
+2. "🚀 Moving to play.pmlm.uk…" The progress is packed into the link, the old address's daily reminder is switched off, and play.pmlm.uk opens.
+3. play.pmlm.uk merges the players in like a backup code (the best record per skill; a player removed there stays removed) and shows **"🎉 Welcome to play.pmlm.uk"**: "The game has its own address now, and your progress came along." Then, when they apply:
+   - 📲 add play.pmlm.uk to the Home Screen, and remove the old icon;
+   - ☁️ link this device to the family again, because sign-ins stay at the old address: the parent logs in on play.pmlm.uk, **🔗 Devices and parents → Link a child's device**; on this device **Parents → ☁️ Family account → Link to my family**; then set **🔒 Plays as** again and unlink the old row;
+   - 🔔 turn the daily reminder on again.
+   → **Let's play!**
+4. If play.pmlm.uk doesn't answer, pmlm.uk shows "Your progress is safe on this device … nothing has moved yet" with **Try again** and **Keep playing here** (the game on pmlm.uk). The old GitHub game just keeps playing.
+5. Opening pmlm.uk again later shows the landing page. It moves again only if the progress there changed since; an installed Android or computer app goes straight to play.pmlm.uk.
+
+**From an iPhone or iPad Home Screen icon** (it keeps its own storage, apart from Safari)
+
+1. An old **pmlm.uk** icon opens on **"🏠 Your game has a new home"**. An old **GitHub** icon says on the Play tab "🏠 The game moved to play.pmlm.uk. Ask a grown-up…", and the steps are at the top of Parents (after the PIN), once play.pmlm.uk answers.
+2. A grown-up follows four steps:
+   1. Tap **📋 Copy progress code** ("Copied! Now open play.pmlm.uk in Safari."; if copying is blocked, the code appears to select by hand).
+   2. In **Safari**, open play.pmlm.uk, tap Share ⬆️ and **Add to Home Screen**.
+   3. Open the **new** icon, tap **📦 Moving from the old app?** on the welcome screen, paste the code and tap **Use this code**. Check the players are there. (Already made a player there? Parents → 💾 Backup → paste → **Add these players**.)
+   4. Only then delete the old icon.
+3. **Read how the game works** under the steps shows the landing page instead.
+4. An old pmlm.uk icon with nothing saved shows the landing page with a bar: "This icon is from the game's old address. Open play.pmlm.uk in Safari and add it to your Home Screen, then delete this icon."
+
+```mermaid
+flowchart TD
+  O[Open pmlm.uk or the old GitHub address] --> I{iPhone or iPad Home Screen icon?}
+  I -->|no, a browser| R{play.pmlm.uk answers?}
+  R -->|no| ST[Progress is safe: Try again or Keep playing here]
+  ST -->|Try again| R
+  R -->|yes| PK[Pack players into the link, old reminder off]
+  PK --> NEW[play.pmlm.uk merges them in]
+  NEW --> WS[Welcome sheet: link again, Plays as, reminders]
+  I -->|yes| C[Copy progress code]
+  C --> SA[Safari: open play.pmlm.uk, Add to Home Screen]
+  SA --> PA[New icon: Moving from the old app? Paste the code]
+  PA --> CK{Players there?}
+  CK -->|yes| DEL[Delete the old icon]
+  CK -->|no| C
 ```

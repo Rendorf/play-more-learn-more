@@ -10,3 +10,6 @@ tests/test-results/
 tests/playwright-report/
 tests/.cache/
 tools/admin/node_modules/
+tools/deploy/node_modules/
+.wrangler/
+_site/

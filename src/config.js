@@ -18,6 +18,6 @@ const PMLM_ENV = 'live';
 const PMLM_FEATURES = { stats: true, feedback: true, leaderboard: true, reminders: true, invites: true, crowd: true };
 // Public key for daily reminders (Web Push), written by tools/admin/setup-push.mjs. Empty: reminders stay hidden.
 const PMLM_VAPID = 'BIzQyWxPqV1Cwj3PIbNEdwZyBNaF4RvJBa7qZxLoQMaMYcJlI2pNOy26ffZckF5GzjKDiG4D7YlIX9DB_-1A3A0';
-// The game's own address. The old address (rendorf.github.io/play-more-learn-more) sends each device here with its
-// progress (src/move.js), once this address serves move.json. Empty: no moving.
-const PMLM_MOVE_TO = 'https://pmlm.uk/';
+// The game's own address. The old addresses (rendorf.github.io/play-more-learn-more, and pmlm.uk, now the landing
+// page) send each device here with its progress (src/move.js), once this address serves move.json. Empty: no moving.
+const PMLM_MOVE_TO = 'https://play.pmlm.uk/';

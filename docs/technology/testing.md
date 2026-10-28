@@ -19,7 +19,7 @@ tests/run-all.sh
 |---|---|---|
 | 0 | Installs test tools and Playwright browsers (Chromium, WebKit) | `npm ci` in `tests/`, `tools/rules-test/`, `tools/admin/` |
 | 1 | Question content for all grades | `node tools/check-content.mjs src/grade*.js` |
-| 2 | `index.html`, `stats.html` and the manifest are built from `src/` | `python3 build.py --check` |
+| 2 | `index.html`, `stats.html`, `welcome.html` and the manifest are built from `src/`; every landing picture exists and is under 200 KB | `python3 build.py --check` |
 | 3 | Unit tests | `cd tests && npm run unit` |
 | 4 | Database rules in the Firestore emulator | `firebase emulators:exec … "cd ../tools/rules-test && npm test"` |
 | 5 | Browser tests against the Auth and Firestore emulators | `cd tests && npm run e2e` |
@@ -31,6 +31,9 @@ Node's built-in test runner. `load.mjs` loads browser source files into a sandbo
 - `board.test.mjs`: nicknames, ISO weeks, active minutes, ranking.
 - `reminders.test.mjs`: reminder timing in time zones, back-off and stopping.
 - `online.test.mjs`: where `Online` is on or off, feature switches, preview storage keys, the REST value format, reminders needing the Home Screen on iPhone, and the invite flow.
+- `move.test.mjs`: which addresses send devices on (never the new one), what a device takes along (`Move.payload()`), and packing it into the link.
+- `landing.test.mjs`: every decision the landing page makes before drawing (show, forward, move, iPhone code).
+- `route.test.mjs`: `functions/index.js` host routing, `_headers` for `move.json`, and that `tools/deploy/stage.sh` uploads only the served files.
 
 ### Rules tests (`tools/rules-test/rules.test.mjs`)
 
@@ -49,6 +52,9 @@ Playwright, one worker (the tests share the emulators). `setup.mjs` first builds
 | `invites.spec.mjs` | invite a friend end to end, each device its own browser context |
 | `admin.spec.mjs` | the reminder sender and backup/restore against the emulator |
 | `layout.spec.mjs` | phones and tablets: no sideways scrolling, no cut-off tabs |
+| `move.spec.mjs` | moving from the old GitHub address to play.pmlm.uk: all progress arrives, removed players stay removed, a family device is told to link again, the iPhone code route |
+| `landing.spec.mjs` | the landing page: both halves, every picture loads, a device that played on pmlm.uk moves once, invites and `#move=` pass through, an unreachable game leaves everything in place, the iPhone code screen |
+| `landing-layout.spec.mjs` | the landing page fits phones and tablets (runs on every device project) |
 | `selftest.spec.mjs` | every generator and picture inside Chromium and WebKit |
 
 Projects in `tests/playwright.config.mjs`: desktop Chrome for everything; iPhone 13 (WebKit) for self-test, layout and existing flows; Pixel 7 for layout; iPad for self-test and layout.

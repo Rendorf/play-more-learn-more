@@ -1,0 +1,122 @@
+# Publishes the site to Cloudflare Pages: https://play.pmlm.uk/ is the game and https://pmlm.uk/ the landing page
+# (functions/index.js picks the page by host). GitHub Pages still publishes the repo root to the old address.
+# - Live: after the Tests workflow passes on a push to main, or by hand from the Actions tab (main only).
+# - Preview: a pull request from this repository with the "preview" label gets its own address,
+#   https://pr-<number>.<project>.pages.dev/ (the game; /welcome is the landing page). Forks never get one.
+# Needs the repository secrets CLOUDFLARE_API_TOKEN (a token with Account → Cloudflare Pages → Edit) and
+# CLOUDFLARE_ACCOUNT_ID, and the repository variable CF_PAGES_PROJECT (the Pages project's name).
+name: Deploy
+on:
+  workflow_run:
+    workflows: [Tests]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+  pull_request:
+    types: [labeled, synchronize, opened, reopened]
+permissions:
+  contents: read
+jobs:
+  deploy:
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+      || github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'preview')
+          && github.event.pull_request.head.repo.full_name == github.repository
+          && (github.event.action != 'labeled' || github.event.label.name == 'preview'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # One deploy at a time per pull request, and one at a time for the live site; a running deploy is never cut short
+    concurrency:
+      group: deploy-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'live' }}
+      cancel-in-progress: false
+    env:
+      LIVE: ${{ github.event_name != 'pull_request' }}
+      SHA: ${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.sha }}
+      PROJECT: ${{ vars.CF_PAGES_PROJECT }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - name: Check the settings
+        env:
+          HAS_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+          HAS_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "::error::A manual deploy publishes main only. Choose 'main' in 'Use workflow from'."
+            exit 1
+          fi
+          missing=''
+          [ "$HAS_TOKEN" = true ] || missing="$missing secret CLOUDFLARE_API_TOKEN;"
+          [ "$HAS_ACCOUNT" = true ] || missing="$missing secret CLOUDFLARE_ACCOUNT_ID;"
+          [ -n "$PROJECT" ] || missing="$missing variable CF_PAGES_PROJECT;"
+          if [ -n "$missing" ]; then
+            echo "::error::Not set up for Cloudflare yet. Add in Settings → Secrets and variables → Actions:$missing"
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SHA }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check that the built pages match src/
+        run: python3 build.py --check
+      - name: Stage the served files
+        run: tools/deploy/stage.sh _site
+      - name: Install wrangler
+        working-directory: tools/deploy
+        run: npm ci --no-audit --no-fund
+      - name: Try the site locally first (host routing, headers, pictures)
+        run: tools/deploy/smoke.sh
+      - name: Find the Cloudflare branch
+        id: target
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # The project was first made by Direct Upload, so its production branch may not be "main": ask Cloudflare
+          code=$(curl -sS -o project.json -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PROJECT") || code=000
+          if [ "$code" != 200 ]; then
+            echo "::error::Cloudflare said $code for Pages project '$PROJECT': $(jq -r '[.errors[]?.message] | join("; ")' project.json 2>/dev/null)"
+            exit 1
+          fi
+          prod=$(jq -r '.result.production_branch // empty' project.json)
+          subdomain=$(jq -r '.result.subdomain // empty' project.json)
+          rm -f project.json
+          if [ "$LIVE" = true ]; then
+            [ -n "$prod" ] || { echo "::error::Pages project '$PROJECT' has no production branch."; exit 1; }
+            branch=$prod
+          else
+            branch=pr-$PR_NUMBER
+          fi
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "subdomain=$subdomain" >> "$GITHUB_OUTPUT"
+      - name: Deploy to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BRANCH: ${{ steps.target.outputs.branch }}
+        # From the repo root, so wrangler also publishes ./functions
+        run: |
+          tools/deploy/node_modules/.bin/wrangler pages deploy _site --project-name "$PROJECT" --branch "$BRANCH" \
+            --commit-hash "$SHA" --commit-message "$(git log -1 --format=%s "$SHA")" --commit-dirty=true
+      - name: Check the live site
+        if: env.LIVE == 'true'
+        run: tools/deploy/check-live.sh
+      - name: Summary
+        if: success()
+        env:
+          BRANCH: ${{ steps.target.outputs.branch }}
+          SUBDOMAIN: ${{ steps.target.outputs.subdomain }}
+        run: |
+          if [ "$LIVE" = true ]; then
+            echo "Live: https://play.pmlm.uk/ (game) and https://pmlm.uk/ (landing page), $(grep -o "const BUILD = '[^']*'" index.html)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Preview of #$PR_NUMBER: https://$BRANCH.$SUBDOMAIN/ (game) and https://$BRANCH.$SUBDOMAIN/welcome (landing page)" >> "$GITHUB_STEP_SUMMARY"
+          fi
