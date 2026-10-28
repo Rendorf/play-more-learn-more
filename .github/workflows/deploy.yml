@@ -84,6 +84,13 @@ jobs:
             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PROJECT") || code=000
           if [ "$code" != 200 ]; then
             echo "::error::Cloudflare said $code for Pages project '$PROJECT': $(jq -r '[.errors[]?.message] | join("; ")' project.json 2>/dev/null)"
+            # Not found: show the project names this token can see in this account, so CF_PAGES_PROJECT can be fixed
+            if [ "$code" = 404 ]; then
+              names=$(curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+                "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects" \
+                | jq -r '[.result[]? | .name + " (" + ([.domains[]?] | join(", ")) + ")"] | join("; ")' 2>/dev/null)
+              echo "::error::Pages projects in this account: ${names:-none}. Set the repository variable CF_PAGES_PROJECT to the one serving pmlm.uk."
+            fi
             exit 1
           fi
           prod=$(jq -r '.result.production_branch // empty' project.json)
