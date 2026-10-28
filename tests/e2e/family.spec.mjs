@@ -91,7 +91,9 @@ test('a parent locks a child\'s device from their own phone; the PIN unlocks it 
   expect((await state(child)).current).not.toBe(kidA.id);
   // Closing the game locks it again
   await child.reload(); await child.locator('#tabs').waitFor();
-  expect((await state(child)).current).toBe(kidA.id);
+  await expect(child.locator('.chip.player')).toContainText('Kid A');
+  // it is saved a moment later (slower machines need longer than a fixed wait)
+  await expect.poll(async () => (await state(child)).current, { timeout: 15000 }).toBe(kidA.id);
 
   // The parent unlocks it
   await parent.selectOption(`select[data-change="devplayer"][data-id="${deviceId}"]`, '');

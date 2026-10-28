@@ -93,7 +93,7 @@ flowchart TD
 ```mermaid
 flowchart LR
   device["Child's or parent's browser<br>(index.html)"]
-  pages["GitHub Pages<br>rendorf.github.io"]
+  pages["Cloudflare Pages<br>pmlm.uk<br>(old address: GitHub Pages)"]
   gstatic["gstatic.com<br>Firebase compat SDK 10.14.1"]
   auth["Firebase Auth<br>email, Google, anonymous"]
   fs["Cloud Firestore<br>project playmorelearnmore"]
@@ -121,7 +121,7 @@ flowchart LR
 | | Live | Preview | claude.ai artifact |
 |---|---|---|---|
 | Built by | `python3 build.py` | `python3 build.py --preview` | `python3 build.py` (`build/artifact.html`) |
-| Published to | https://rendorf.github.io/play-more-learn-more/ (Pages, from `main`) | https://rendorf.github.io/pmlm-preview/ (`tools/deploy-preview.sh`, repo `Rendorf/pmlm-preview`) | the claude.ai artifact named in `CLAUDE.md`, with the Artifact tool |
+| Published to | https://pmlm.uk/ (Cloudflare Pages, from `main`); the old address https://rendorf.github.io/play-more-learn-more/ (GitHub Pages, from `main`) moves devices there | https://rendorf.github.io/pmlm-preview/ (`tools/deploy-preview.sh`, repo `Rendorf/pmlm-preview`) | the claude.ai artifact named in `CLAUDE.md`, with the Artifact tool |
 | Settings | `src/config.js` | `src/config.preview.js` | `src/config.js`, but online parts switch themselves off |
 | Firebase | live project `playmorelearnmore` | a separate staging project (currently `null` until set up) | none: the artifact CSP blocks gstatic |
 | Device storage keys | `pmlm.*` | `pmlm-preview.*` | `pmlm.*` in the artifact's own origin |
@@ -129,6 +129,8 @@ flowchart LR
 | Marked | no | red PREVIEW ribbon, "PMLM Preview" | no |
 
 The preview shares the `rendorf.github.io` origin with the live game, so it must use different storage keys. A browser test checks that the preview never touches real progress.
+
+Browsers keep saved progress per address, so moving the game from rendorf.github.io to pmlm.uk moves each device's progress with it: the old address checks that pmlm.uk serves the game (`move.json`), then opens pmlm.uk with the progress packed into the `#move=` fragment, which never reaches a server. pmlm.uk merges it in like a backup code. Home Screen apps on iPhone and iPad keep their own storage, so they move with a code (Parents → Move to pmlm.uk). See `src/move.js`.
 
 ## Where to read next
 

@@ -1316,6 +1316,7 @@
         ${invitesOn() && Online.invite.ref ? `<div class="card invitebanner"><span class="ib">🎁</span><span><b>A friend invited you!</b> Make your player and finish your first round: you get ${INVITE_GIFT} 🪙 and your friend gets ${INVITE_COINS} 🪙. <span class="muted">Your friend will see your player name.</span></span></div>` : ''}
         ${Sync.isParent ? '<p class="center"><b>You are logged in as a parent.</b> Your family has no players yet. Add one here, or link a child\'s device.</p>' : ''}
         <button class="btn primary block pulse" data-act="newplayer">Add a player</button>
+        ${Move.TO && !Sync.isParent ? '<button class="link" data-act="moveopen">📦 Moving from the old app? Paste your progress code</button>' : ''}
         ${Sync.isParent ? '<button class="btn block" data-act="familyonly">🔗 Link a child\'s device</button>'
           : Sync.enabled ? `<div class="grid2"><button class="btn ghost" data-act="linkopen">🔗 Link to my family</button><button class="btn ghost" data-act="loginopen">👤 Parent login</button></div>
             <p class="center muted" style="font-size:.85rem">Already playing on another device? A parent shows a link code in their dashboard. Type it here with "Link to my family".</p>` : ''}
@@ -1414,6 +1415,7 @@
       setTimeout(() => showCelebrations([{ e: team().emoji || '🤝', title: 'Family goal reached!', text: team().text, wish: true }]), 500);
     }
     let html = `<div class="stack">
+      ${S.moveByCode ? '<button class="card" data-act="tab" data-id="parent" style="border:0;text-align:left"><b>🏠 The game moved to pmlm.uk.</b> Ask a grown-up to move your progress: Parents → Move to pmlm.uk.</button>' : ''}
       ${gradePick(g)}
       ${todayCard(p)}
       <div class="card stack">
@@ -2273,6 +2275,7 @@
     const sws = who.streakWishes || newStreakWishes();
     view.innerHTML = `<div class="stack">
       <div class="row between"><h2>Grown-ups</h2>${Sync.isParent ? '' : '<button class="btn small ghost" data-act="lock">🔒 Lock</button>'}</div>
+      ${moveCard()}
 
       <div class="card stack"><h3>👨‍👩‍👧 Family</h3>
         <div class="famgrid">${family}</div>
@@ -2656,6 +2659,18 @@
       const names = state.profiles.map(p => p.name.trim().toLowerCase()), twice = state.profiles.find((p, i) => names.indexOf(names[i]) !== i);
       toast(`${added} player(s) added${updated ? `, ${updated} updated` : ''}.` + (twice ? ` There are now two players called ${h(twice.name)}: use "Same child twice?" under Players to combine them.` : ''));
     },
+    // Moving from the old address with a code (Home Screen apps on iPhone and iPad)
+    copymove: () => {
+      const code = JSON.stringify(state);
+      const show = () => openSheet(`<div class="stack"><h2>📋 Progress code</h2><p class="muted">Select all of it and copy it.</p>
+        <div class="field"><textarea id="movecodeout" readonly>${h(code)}</textarea></div><button class="btn ghost block" data-act="close">Done</button></div>`, true);
+      try { navigator.clipboard.writeText(code).then(() => toast('Copied! Now open pmlm.uk in Safari.'), show); } catch (e) { show(); }
+    },
+    moveopen: () => openSheet(`<div class="stack"><div class="row between"><h2>📦 Bring your progress</h2><button class="iconbtn" data-act="close" aria-label="Close">✕</button></div>
+      <p class="muted">In the old app, a grown-up opens <b>Parents → Move to pmlm.uk</b> and taps <b>Copy progress code</b>. Paste it here.</p>
+      <div class="field"><label for="movecode">Progress code</label><textarea id="movecode" placeholder="Paste the code here"></textarea></div>
+      <button class="btn primary block" data-act="movego">Use this code</button></div>`, true),
+    movego: () => importCode($('#movecode').value),
     importok: () => { const s = S.pendingImport; if (!s) return; state = Object.assign(DEFAULT(), s); S = { screen: 'home', tab: 'play' }; closeSheet(); save(); render(); toast('Backup loaded'); },
     // 🚩 Report a question. If the next question was about to come up, show the explanation and a Next button instead.
     flag: () => {
@@ -2880,33 +2895,98 @@
       <div class="card" style="font-size:.85rem;white-space:pre-wrap;overflow-wrap:anywhere">${errors.map(h).join('\n') || 'No problems found.'}</div></div>`;
   }
 
+  // ---------- Moving to the game's own address (src/move.js) ----------
+  // The old address sends each device on with its progress. A Home Screen app on an iPhone or iPad keeps its own
+  // storage, apart from Safari, so there a grown-up moves the progress with a code instead (Parents → Move).
+  const iosApp = () => Online.install.platform === 'ios' && Online.install.standalone;
+  async function leaveOldAddress() {
+    const t = Move.target(location);
+    if (!t) return false;
+    if (iosApp() && !t.test) { S.moveByCode = true; return false; }
+    view.innerHTML = '<div class="stack center" style="padding-block:35vh 0"><h2>🚀 Moving to pmlm.uk…</h2></div>';
+    if (!(await Move.ready(t))) { view.innerHTML = ''; return false; }
+    let family = false;
+    try { family = !!localStorage.getItem(KEY + 'sync'); } catch (e) { /* storage blocked */ }
+    const push = Online.push.state.on ? { hour: Online.push.state.hour } : null;
+    // Reminders from the old address would come twice once they are turned on again over there
+    if (push) await Online.push.disable().catch(() => {});
+    return Move.go({ v: 1, state, family, push }, t);
+  }
+  // Merge progress that came from the old address. The same copy arriving again (an old bookmark) changes nothing.
+  function arriveMoved(m) {
+    const s = m && m.state;
+    if (!s || s.v !== 1 || !Array.isArray(s.profiles)) return null;
+    const key = `${s.updatedAt || 0}:${s.profiles.length}`, seen = state.movedFrom || [];
+    if (seen.indexOf(key) >= 0) return null;
+    if (!state.profiles.length) state = Object.assign(DEFAULT(), s);
+    else {
+      const alias = state.aliases || {};
+      for (const ip of s.profiles) {
+        const target = state.profiles.find(p => p.id === ip.id || p.id === alias[ip.id]);
+        if (target) combineProfiles(target, ip, false); else state.profiles.push(ip);
+      }
+      if (!state.pin && s.pin) state.pin = s.pin;
+      if (!state.current && state.profiles[0]) state.current = state.profiles[0].id;
+    }
+    state.movedFrom = seen.concat([key]).slice(-5);
+    // Stored as it came, without save(): the same progress, so family sync must not see it as newly changed
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* storage blocked */ }
+    return { players: s.profiles.length, family: !!m.family, push: m.push || null };
+  }
+  function movedSheet(info) {
+    openSheet(`<div class="stack">
+      <div class="row between"><h2>🎉 Welcome to pmlm.uk</h2><button class="iconbtn" data-act="close" aria-label="Close">✕</button></div>
+      <p>The game has its own address now, and ${info.players === 1 ? 'your progress' : 'everyone’s progress'} came along. Use <b>pmlm.uk</b> from now on.</p>
+      <ul class="plain">
+        ${Online.install.standalone ? '' : '<li>📲 On a phone or tablet, add <b>pmlm.uk</b> to the Home Screen, and remove the old icon.</li>'}
+        ${info.family ? '<li>☁️ This device was linked to a family account. To keep saving online, link it again under Parents → Family account (a parent shows a code), or log in again as a parent.</li>' : ''}
+        ${info.push ? '<li>🔔 Turn the daily reminder on again under Parents → Daily reminder.</li>' : ''}
+      </ul>
+      <button class="btn primary block" data-act="close">Let’s play!</button></div>`, true);
+  }
+  // Old Home Screen app on an iPhone or iPad: the steps, and the progress as a code to paste in the new app
+  function moveCard() {
+    if (!S.moveByCode) return '';
+    return `<div class="card stack" id="movecard"><h3>🏠 Move to pmlm.uk</h3>
+      <p style="font-size:.95rem">The game has a new address, <b>pmlm.uk</b>. This Home Screen app keeps its progress to itself, so move it in three steps:</p>
+      <ol class="steps"><li>Tap <b>Copy progress code</b> below.</li><li>In <b>Safari</b>, open <b>pmlm.uk</b> and add it to the Home Screen.</li>
+        <li>Open the new icon, tap <b>Moving from the old app?</b> and paste the code. Then delete the old icon.</li></ol>
+      <button class="btn small primary" data-act="copymove">📋 Copy progress code</button></div>`;
+  }
+
   // ---------- Boot ----------
   World.init($('#world'));
   FX.init($('#fx'));
   if (SELFTEST) { selfTest(); return; }
   if (DEBUG) window.__pmlm = { get state() { return state; }, get R() { return R; }, ACT, today, render };
-  Sync.boot();
-  Online.boot({ build: BUILD, onChange: () => {
-    const typing = document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
-    if (S.tab === 'parent' && S.screen === 'home' && !typing && !document.querySelector('.overlay')) refreshView();
-  } });
-  if (Online.firstToday()) stat('open', { n: state.profiles.length });
-  // Arrived through a friend's invite link (?invite=CODE): only a device with no players yet can use it
-  const invited = (new URLSearchParams(location.search).get('invite') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  if (invited) {
-    const u = new URL(location.href);
-    u.searchParams.delete('invite');
-    try { history.replaceState(null, '', u.pathname + u.search + u.hash); } catch (e) { /* the link stays in the address bar */ }
-    if (invitesOn() && state.profiles.length) setTimeout(() => toast('This device already plays, so the invite can\'t be used here.'), 900);
-    else if (invitesOn() && Online.invite.land(invited)) stat('invite', { mode: 'open' }, null);
-  }
-  setTimeout(() => collectInvites(), 4000);
-  render();
-  Cloud.init(remote => {
-    if (remote && remote.v === 1 && (remote.updatedAt || 0) > (state.updatedAt || 0)) {
-      state = Object.assign(DEFAULT(), remote);
-      try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* storage blocked */ }
-      if (S.screen !== 'round') render();
-    } else if (state.profiles.length) Cloud.save(state);
-  });
+  (async () => {
+    // The old address sends this device on to the game's own address, progress and all
+    if (await leaveOldAddress()) return;
+    const moved = arriveMoved(await Move.arrive());
+    Sync.boot();
+    Online.boot({ build: BUILD, onChange: () => {
+      const typing = document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+      if (S.tab === 'parent' && S.screen === 'home' && !typing && !document.querySelector('.overlay')) refreshView();
+    } });
+    if (Online.firstToday()) stat('open', { n: state.profiles.length });
+    // Arrived through a friend's invite link (?invite=CODE): only a device with no players yet can use it
+    const invited = (new URLSearchParams(location.search).get('invite') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (invited) {
+      const u = new URL(location.href);
+      u.searchParams.delete('invite');
+      try { history.replaceState(null, '', u.pathname + u.search + u.hash); } catch (e) { /* the link stays in the address bar */ }
+      if (invitesOn() && state.profiles.length) setTimeout(() => toast('This device already plays, so the invite can\'t be used here.'), 900);
+      else if (invitesOn() && Online.invite.land(invited)) stat('invite', { mode: 'open' }, null);
+    }
+    setTimeout(() => collectInvites(), 4000);
+    render();
+    if (moved) setTimeout(() => movedSheet(moved), 700);
+    Cloud.init(remote => {
+      if (remote && remote.v === 1 && (remote.updatedAt || 0) > (state.updatedAt || 0)) {
+        state = Object.assign(DEFAULT(), remote);
+        try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* storage blocked */ }
+        if (S.screen !== 'round') render();
+      } else if (state.profiles.length) Cloud.save(state);
+    });
+  })();
 })();

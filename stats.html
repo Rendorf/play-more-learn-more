@@ -68,6 +68,9 @@ const PMLM_ENV = 'live';
 const PMLM_FEATURES = { stats: true, feedback: true, leaderboard: true, reminders: true, invites: true };
 // Public key for daily reminders (Web Push), written by tools/admin/setup-push.mjs. Empty: reminders stay hidden.
 const PMLM_VAPID = 'BIzQyWxPqV1Cwj3PIbNEdwZyBNaF4RvJBa7qZxLoQMaMYcJlI2pNOy26ffZckF5GzjKDiG4D7YlIX9DB_-1A3A0';
+// The game's own address. The old address (rendorf.github.io/play-more-learn-more) sends each device here with its
+// progress (src/move.js), once this address serves move.json. Empty: no moving.
+const PMLM_MOVE_TO = 'https://pmlm.uk/';
 </script>
 </head>
 <body>
@@ -79,7 +82,7 @@ const PMLM_VAPID = 'BIzQyWxPqV1Cwj3PIbNEdwZyBNaF4RvJBa7qZxLoQMaMYcJlI2pNOy26ffZc
   const EMU = /[?&]emu=1/.test(location.search);
   const SDK = 'https://www.gstatic.com/firebasejs/10.14.1/';
   const load = src => new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
-  const show = html => { app.innerHTML = `<div class="row"><h1>PMLM test dashboard</h1><span class="muted">${EMU ? 'emulator · ' : ''}version 2026-10-27 19:02 UTC</span></div>${html}`; };
+  const show = html => { app.innerHTML = `<div class="row"><h1>PMLM test dashboard</h1><span class="muted">${EMU ? 'emulator · ' : ''}version 2026-10-28 06:36 UTC</span></div>${html}`; };
   if (typeof PMLM_FIREBASE === 'undefined' || !PMLM_FIREBASE) { show('<p class="err">This copy has no Firebase project set up (src/config.js).</p>'); return; }
 
   let fb, db;

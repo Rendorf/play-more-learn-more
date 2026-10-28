@@ -2,7 +2,7 @@
 
 A free, playful maths practice game for the Cambridge curriculum, Grades 1–9 (Primary Stages 1–6 and Lower Secondary Stages 7–9).
 
-**Play it:** open `index.html` in any browser, or visit the GitHub Pages site for this repository.
+**Play it:** https://pmlm.uk/ (or open `index.html` in any browser). The old address, https://rendorf.github.io/play-more-learn-more/, moves each device to pmlm.uk with its progress.
 
 - Short lessons with pictures, then practice with hints that get more helpful after each try
 - Combo streaks with escalating sound and effects, boss battles, daily quests, coins and trophies
@@ -164,5 +164,5 @@ The browser tests never use the real Firebase project: `?emu=1` points the game 
    node tools/admin/backup-firestore.mjs --key ~/.config/pmlm/live-service-account.json
    ```
    then publish the new `firestore.rules` to the live project, and set up reminder keys if needed.
-4. **Merge** only when the tests are green and the checklist is done, then check the live version: `curl -s https://rendorf.github.io/play-more-learn-more/ | grep "const BUILD"`.
+4. **Merge** only when the tests are green and the checklist is done, then check the live version: `curl -s https://pmlm.uk/ | grep "const BUILD"`.
 5. **If something is wrong:** `git revert -m 1 <merge commit>` and push. The old version comes back in 1–2 minutes and keeps everyone's progress (the tests check this). Or switch off one feature in `PMLM_FEATURES`. `backup-firestore.mjs --restore <file> --yes` puts back database documents from a backup.
