@@ -133,6 +133,7 @@ Every keycap also plays a switch sound when pressed (`Sfx.key`). Bigger keys sou
 | Keypad keys | radius 12 px, gap 8 px (6 px on short screens) |
 | Bottom sheet | radius 28 px on top corners, max height 92% |
 | Centred sheet `.overlay.mid` | radius 28 px, max width 520 px |
+| Title row `.row.between > h2` | the title takes the free width and wraps beside its ✕; `.nobr` keeps a hyphenated word whole |
 | Chips and bars | fully round (`999px`) |
 
 Cards use an inner outline (`box-shadow: inset 0 0 0 2px var(--line)`) instead of a border, so they never change size when highlighted.

@@ -2202,7 +2202,7 @@
       ...(Online.push.configured ? [['🔔 Turn on a daily reminder', 'a friendly nudge on days nobody has played.']] : []),
     ];
     openSheet(`<div class="stack">
-      <div class="row between"><h2>👋 Grown-ups: 1-minute setup</h2><button class="iconbtn" data-act="close" aria-label="Close">✕</button></div>
+      <div class="row between"><h2>👋 <span class="nobr">Grown-ups:</span> <span class="nobr">1-minute setup</span></h2><button class="iconbtn" data-act="close" aria-label="Close">✕</button></div>
       <p class="muted">A few quick things help ${h(p.name)} come back every day.</p>
       <ol class="steps">${steps.map(([t, s]) => `<li><b>${t}</b><span class="muted">${s}</span></li>`).join('')}</ol>
       <button class="btn primary block" data-act="qsgo">Set up now</button>
