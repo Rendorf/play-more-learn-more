@@ -2,7 +2,7 @@
 
 A DopaDrill-style maths practice game for the Cambridge curriculum, Grades 1–9 (Primary Stages 1–6, Lower Secondary 7–9). Single-page, no framework, no server of its own.
 
-- **Live:** https://rendorf.github.io/play-more-learn-more/ (GitHub Pages, deploys from `main`)
+- **Live:** https://pmlm.uk/ (Cloudflare Pages, deploys from `main`). The old address https://rendorf.github.io/play-more-learn-more/ (GitHub Pages, also from `main`) sends each device to pmlm.uk with its progress (`src/move.js`); keep it running.
 - **Repo:** https://github.com/Rendorf/play-more-learn-more (public: never commit personal or family details here; use `CLAUDE.local.md`, which is gitignored)
 - **claude.ai copy:** https://claude.ai/artifact/UyznLuwo4usV7cnubQ75Tt. Publish `build/artifact.html` with the Artifact tool and pass this URL as `url`. That copy has no Firebase, because the artifact CSP blocks gstatic, so it uses the artifact `db` capability instead.
 
@@ -39,7 +39,7 @@ Run these from the repo root.
 - **In-game self-test:** open `index.html#selftest`, then read `window.__selftest`. It must show 201 skills and 0 problems.
 - **Family-account flow tests:** `python3 tools/make-synctest.py` writes `build/synctest.html`, which uses the mock backend. Each "device" is a localStorage snapshot and the mock "server" lives in sessionStorage.
 - **Rules tests:** run `cd tools/rules-test && npm install && npm run emulator` in one terminal, then `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm test`. Needs Java (Homebrew `openjdk`).
-- **Deploy:** `main` is protected: nobody can push to it directly. Work on a branch, `git push -u origin <branch>`, open a pull request (`gh pr create`), and turn on auto-merge (`gh pr merge --auto --merge`). It merges once the **test** check (`tests/run-all.sh`) passes on a branch that is up to date with `main` (use "Update branch" if `main` moved). Pages updates 1–2 minutes later. Confirm with `curl -s https://rendorf.github.io/play-more-learn-more/ | grep "const BUILD"`. Children's devices must reload to get it.
+- **Deploy:** `main` is protected: nobody can push to it directly. Work on a branch, `git push -u origin <branch>`, open a pull request (`gh pr create`), and turn on auto-merge (`gh pr merge --auto --merge`). It merges once the **test** check (`tests/run-all.sh`) passes on a branch that is up to date with `main` (use "Update branch" if `main` moved). Pages updates 1–2 minutes later. Confirm with `curl -s https://pmlm.uk/ | grep "const BUILD"`. Children's devices must reload to get it.
 
 ## How things work
 - **Progress:** stored in `localStorage` key `pmlm.v1`, plus Firebase sync when signed in.
@@ -93,7 +93,8 @@ Run these from the repo root.
   - **Rewards:** the friend's first real round gives +50 (`INVITE_GIFT`). `collectInvites()` on the inviting device pays +100 (`INVITE_COINS`) per friend, up to 10 (`INVITE_MAX`), into `p.inviteRewards`.
   - **Parents' view:** `p.friends` is a synced summary for parents.
   - **Switches and stats:** `state.settings.invites === false` hides it. Stats events have `type: 'invite'` with `mode` share/open/join/play/reward.
-- **Preview copy:** `PMLM_ENV = 'preview'` switches every localStorage key to `pmlm-preview.` (it shares the rendorf.github.io origin with the live game).
+- **Preview copy:** `PMLM_ENV = 'preview'` switches every localStorage key to `pmlm-preview.` (it shares the rendorf.github.io origin with the old address).
+- **Moving to pmlm.uk (`src/move.js`, `PMLM_MOVE_TO`):** browsers keep progress per address. On the old address the game first fetches `https://pmlm.uk/move.json` (allowed for rendorf.github.io by `_headers`, so only once pmlm.uk serves this game), then `location.replace`s to `pmlm.uk/#move=<gzip+base64url of {state, family, push}>`. pmlm.uk merges it like a backup code (`combineProfiles(…, false)`), remembers it in `state.movedFrom` so an old bookmark changes nothing, and clears the fragment. iPhone/iPad Home Screen apps keep their own storage, so there Parents → Move to pmlm.uk copies a code and the new app's welcome screen takes it. `tests/e2e/move.spec.mjs` uses 127.0.0.1 as the old address and localhost as the new one (`?moveto=`).
 
 ## Conventions and gotchas
 - **Older tablets:** avoid `:is()` and other very new CSS/JS features. A dropped selector list silently unstyles everything. `color-mix` is already used, with background-color fallbacks.

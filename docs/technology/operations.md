@@ -40,7 +40,7 @@ gh pr merge --auto --merge
 5. GitHub Pages updates 1–2 minutes after the merge. Check the live build stamp:
 
 ```bash
-curl -s https://rendorf.github.io/play-more-learn-more/ | grep "const BUILD"
+curl -s https://pmlm.uk/ | grep "const BUILD"
 ```
 
 6. **Children's devices must reload** to get the new version. The service worker caches nothing, so a reload is enough. A parent's Devices list shows each linked device's version and says "reload it" when it is behind.

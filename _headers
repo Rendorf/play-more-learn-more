@@ -1,0 +1,5 @@
+# Cloudflare Pages response headers (GitHub Pages ignores this file).
+# The old address checks move.json before sending a device here with its progress (src/move.js).
+/move.json
+  Access-Control-Allow-Origin: https://rendorf.github.io
+  Cache-Control: no-store

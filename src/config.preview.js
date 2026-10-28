@@ -7,3 +7,5 @@ const PMLM_ENV = 'preview';
 const PMLM_FEATURES = { stats: true, feedback: true, leaderboard: true, reminders: true, invites: true };
 // Public key for reminders on the staging project (tools/admin/setup-push.mjs --preview writes it)
 const PMLM_VAPID = '';
+// The preview never moves anywhere
+const PMLM_MOVE_TO = '';

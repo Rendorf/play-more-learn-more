@@ -21,7 +21,7 @@ const args = process.argv.slice(2);
 const opt = name => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : null; };
 const ENV = opt('--env') || 'live', DRY = args.includes('--dry-run'), ONLY = opt('--only'), EMU = args.includes('--emulator');
 const NOW = opt('--now') ? Date.parse(opt('--now')) : Date.now();
-const SITE = ENV === 'staging' ? 'https://rendorf.github.io/pmlm-preview/' : 'https://rendorf.github.io/play-more-learn-more/';
+const SITE = ENV === 'staging' ? 'https://rendorf.github.io/pmlm-preview/' : 'https://pmlm.uk/';
 const root = new URL('../../', import.meta.url);
 
 // The game's own files: reminder rules and the public key

@@ -530,6 +530,9 @@ const PMLM_ENV = 'live';
 const PMLM_FEATURES = { stats: true, feedback: true, leaderboard: true, reminders: true, invites: true };
 // Public key for daily reminders (Web Push), written by tools/admin/setup-push.mjs. Empty: reminders stay hidden.
 const PMLM_VAPID = 'BIzQyWxPqV1Cwj3PIbNEdwZyBNaF4RvJBa7qZxLoQMaMYcJlI2pNOy26ffZckF5GzjKDiG4D7YlIX9DB_-1A3A0';
+// The game's own address. The old address (rendorf.github.io/play-more-learn-more) sends each device here with its
+// progress (src/move.js), once this address serves move.json. Empty: no moving.
+const PMLM_MOVE_TO = 'https://pmlm.uk/';
 
 </script>
 <script>/* util.js */
@@ -27577,6 +27580,79 @@ const PMLM_MERGE = (() => {
 })();
 
 </script>
+<script>/* move.js */
+// Moving the game to its own address (PMLM_MOVE_TO, https://pmlm.uk/). The browser keeps saved progress per
+// address, so a device that opens the old link (rendorf.github.io/play-more-learn-more) carries its progress
+// along in the new address's #move= fragment (never sent to any server), and the new address merges it in.
+// The old address only moves a device after checking that the new one really serves the game (move.json, allowed
+// for the old address through _headers), so a child is never sent to a page that isn't ready.
+const Move = (() => {
+  const TO = typeof PMLM_MOVE_TO !== 'undefined' ? PMLM_MOVE_TO : '';
+  const LIVE = typeof PMLM_ENV === 'undefined' || PMLM_ENV === 'live';
+  const FROM_HOST = 'rendorf.github.io', FROM_PATH = '/play-more-learn-more';
+  const LOCAL_RE = /^(localhost|127\.0\.0\.1|\[::1\])$/;
+
+  // ---------- Packing progress into the link ----------
+  const b64u = bytes => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+  const unb64u = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.length % 4)) % 4)), c => c.charCodeAt(0));
+  const pipe = async (bytes, stream) => new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer());
+  // 'z.' + gzip when the browser can (most since 2023), otherwise 'j.' + plain JSON
+  async function encode(obj) {
+    const bytes = new TextEncoder().encode(JSON.stringify(obj));
+    if (typeof CompressionStream !== 'undefined') return 'z.' + b64u(await pipe(bytes, new CompressionStream('gzip')));
+    return 'j.' + b64u(bytes);
+  }
+  async function decode(s) {
+    const kind = s.slice(0, 2), bytes = unb64u(s.slice(2));
+    const raw = kind === 'z.' ? await pipe(bytes, new DecompressionStream('gzip')) : bytes;
+    return JSON.parse(new TextDecoder().decode(raw));
+  }
+
+  // Where this page should send the device, or null. loc: { hostname, pathname, search, hash }.
+  // On a local test server, ?moveto=<url> plays the old address so the browser tests can try the whole move.
+  function target(loc) {
+    const params = new URLSearchParams(loc.search), hash = (loc.hash || '').replace('#', '');
+    if (hash === 'selftest' || hash === 'debug' || /[?&]debug=1/.test(loc.search)) return null;
+    if (LOCAL_RE.test(loc.hostname) && params.get('moveto')) return { url: params.get('moveto'), test: true };
+    if (!LIVE || !TO || loc.hostname !== FROM_HOST || !(loc.pathname === FROM_PATH || loc.pathname.indexOf(FROM_PATH + '/') === 0)) return null;
+    params.delete('moveto');
+    const q = params.toString();
+    return { url: TO + (q ? '?' + q : ''), test: false };
+  }
+
+  // Is the new address up and serving the game? (3 seconds at most)
+  async function ready(t) {
+    const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = setTimeout(() => ctl && ctl.abort(), 3000);
+    try {
+      const u = new URL('move.json', t.url).href;
+      if (t.test) { await fetch(u, { mode: 'no-cors', cache: 'no-store', signal: ctl && ctl.signal }); return true; }
+      const r = await fetch(u, { cache: 'no-store', signal: ctl && ctl.signal });
+      const j = r.ok ? await r.json() : null;
+      return !!(j && j.app === 'play-more-learn-more' && j.receives >= 1);
+    } catch (e) { return false; } finally { clearTimeout(timer); }
+  }
+
+  return {
+    TO, target, encode, decode, ready,
+    // Send this device to the new address with its progress (check ready() first). False if it stays here.
+    async go(payload, t) {
+      let code;
+      try { code = await encode(payload); } catch (e) { return false; }
+      location.replace(t.url.split('#')[0] + '#move=' + code);
+      return true;
+    },
+    // On the new address: the progress that came in the link (and the link is cleaned up), or null
+    async arrive() {
+      const m = /^#move=([zj]\.[A-Za-z0-9_-]+)$/.exec(location.hash);
+      if (!m) return null;
+      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* the fragment stays visible */ }
+      try { return await decode(m[1]); } catch (e) { console.warn('Moved progress could not be read', e); return null; }
+    },
+  };
+})();
+
+</script>
 <script>/* engine.js */
 // Game engine: saved state, rounds, mastery, wishes, parent area and all screens.
 (() => {
@@ -27601,7 +27677,7 @@ const PMLM_MERGE = (() => {
   // The preview copy (build.py --preview) keeps its own storage, so it never reads or writes real progress
   const KEY = typeof PMLM_ENV !== 'undefined' && PMLM_ENV === 'preview' ? 'pmlm-preview.' : 'pmlm.';
   const STORE_KEY = KEY + 'v1';
-  const BUILD = '2026-10-27 19:02 UTC';   // replaced with the build time by build.py
+  const BUILD = '2026-10-28 06:36 UTC';   // replaced with the build time by build.py
 
   const AVATARS = ['🦊', '🐼', '🐯', '🐸', '🐧', '🦄', '🐨', '🐰'];
   const SHOP_AVATARS = [['🦁', 40], ['🦉', 40], ['🐙', 40], ['🦋', 40], ['🐳', 50], ['🦩', 50], ['🐲', 60], ['🦖', 60], ['👽', 80], ['🤖', 80], ['🐉', 120], ['🦄', 0]].filter(a => a[1] > 0);
@@ -28896,6 +28972,7 @@ const PMLM_MERGE = (() => {
         ${invitesOn() && Online.invite.ref ? `<div class="card invitebanner"><span class="ib">🎁</span><span><b>A friend invited you!</b> Make your player and finish your first round: you get ${INVITE_GIFT} 🪙 and your friend gets ${INVITE_COINS} 🪙. <span class="muted">Your friend will see your player name.</span></span></div>` : ''}
         ${Sync.isParent ? '<p class="center"><b>You are logged in as a parent.</b> Your family has no players yet. Add one here, or link a child\'s device.</p>' : ''}
         <button class="btn primary block pulse" data-act="newplayer">Add a player</button>
+        ${Move.TO && !Sync.isParent ? '<button class="link" data-act="moveopen">📦 Moving from the old app? Paste your progress code</button>' : ''}
         ${Sync.isParent ? '<button class="btn block" data-act="familyonly">🔗 Link a child\'s device</button>'
           : Sync.enabled ? `<div class="grid2"><button class="btn ghost" data-act="linkopen">🔗 Link to my family</button><button class="btn ghost" data-act="loginopen">👤 Parent login</button></div>
             <p class="center muted" style="font-size:.85rem">Already playing on another device? A parent shows a link code in their dashboard. Type it here with "Link to my family".</p>` : ''}
@@ -28994,6 +29071,7 @@ const PMLM_MERGE = (() => {
       setTimeout(() => showCelebrations([{ e: team().emoji || '🤝', title: 'Family goal reached!', text: team().text, wish: true }]), 500);
     }
     let html = `<div class="stack">
+      ${S.moveByCode ? '<button class="card" data-act="tab" data-id="parent" style="border:0;text-align:left"><b>🏠 The game moved to pmlm.uk.</b> Ask a grown-up to move your progress: Parents → Move to pmlm.uk.</button>' : ''}
       ${gradePick(g)}
       ${todayCard(p)}
       <div class="card stack">
@@ -29853,6 +29931,7 @@ const PMLM_MERGE = (() => {
     const sws = who.streakWishes || newStreakWishes();
     view.innerHTML = `<div class="stack">
       <div class="row between"><h2>Grown-ups</h2>${Sync.isParent ? '' : '<button class="btn small ghost" data-act="lock">🔒 Lock</button>'}</div>
+      ${moveCard()}
 
       <div class="card stack"><h3>👨‍👩‍👧 Family</h3>
         <div class="famgrid">${family}</div>
@@ -30236,6 +30315,18 @@ const PMLM_MERGE = (() => {
       const names = state.profiles.map(p => p.name.trim().toLowerCase()), twice = state.profiles.find((p, i) => names.indexOf(names[i]) !== i);
       toast(`${added} player(s) added${updated ? `, ${updated} updated` : ''}.` + (twice ? ` There are now two players called ${h(twice.name)}: use "Same child twice?" under Players to combine them.` : ''));
     },
+    // Moving from the old address with a code (Home Screen apps on iPhone and iPad)
+    copymove: () => {
+      const code = JSON.stringify(state);
+      const show = () => openSheet(`<div class="stack"><h2>📋 Progress code</h2><p class="muted">Select all of it and copy it.</p>
+        <div class="field"><textarea id="movecodeout" readonly>${h(code)}</textarea></div><button class="btn ghost block" data-act="close">Done</button></div>`, true);
+      try { navigator.clipboard.writeText(code).then(() => toast('Copied! Now open pmlm.uk in Safari.'), show); } catch (e) { show(); }
+    },
+    moveopen: () => openSheet(`<div class="stack"><div class="row between"><h2>📦 Bring your progress</h2><button class="iconbtn" data-act="close" aria-label="Close">✕</button></div>
+      <p class="muted">In the old app, a grown-up opens <b>Parents → Move to pmlm.uk</b> and taps <b>Copy progress code</b>. Paste it here.</p>
+      <div class="field"><label for="movecode">Progress code</label><textarea id="movecode" placeholder="Paste the code here"></textarea></div>
+      <button class="btn primary block" data-act="movego">Use this code</button></div>`, true),
+    movego: () => importCode($('#movecode').value),
     importok: () => { const s = S.pendingImport; if (!s) return; state = Object.assign(DEFAULT(), s); S = { screen: 'home', tab: 'play' }; closeSheet(); save(); render(); toast('Backup loaded'); },
     // 🚩 Report a question. If the next question was about to come up, show the explanation and a Next button instead.
     flag: () => {
@@ -30460,35 +30551,100 @@ const PMLM_MERGE = (() => {
       <div class="card" style="font-size:.85rem;white-space:pre-wrap;overflow-wrap:anywhere">${errors.map(h).join('\n') || 'No problems found.'}</div></div>`;
   }
 
+  // ---------- Moving to the game's own address (src/move.js) ----------
+  // The old address sends each device on with its progress. A Home Screen app on an iPhone or iPad keeps its own
+  // storage, apart from Safari, so there a grown-up moves the progress with a code instead (Parents → Move).
+  const iosApp = () => Online.install.platform === 'ios' && Online.install.standalone;
+  async function leaveOldAddress() {
+    const t = Move.target(location);
+    if (!t) return false;
+    if (iosApp() && !t.test) { S.moveByCode = true; return false; }
+    view.innerHTML = '<div class="stack center" style="padding-block:35vh 0"><h2>🚀 Moving to pmlm.uk…</h2></div>';
+    if (!(await Move.ready(t))) { view.innerHTML = ''; return false; }
+    let family = false;
+    try { family = !!localStorage.getItem(KEY + 'sync'); } catch (e) { /* storage blocked */ }
+    const push = Online.push.state.on ? { hour: Online.push.state.hour } : null;
+    // Reminders from the old address would come twice once they are turned on again over there
+    if (push) await Online.push.disable().catch(() => {});
+    return Move.go({ v: 1, state, family, push }, t);
+  }
+  // Merge progress that came from the old address. The same copy arriving again (an old bookmark) changes nothing.
+  function arriveMoved(m) {
+    const s = m && m.state;
+    if (!s || s.v !== 1 || !Array.isArray(s.profiles)) return null;
+    const key = `${s.updatedAt || 0}:${s.profiles.length}`, seen = state.movedFrom || [];
+    if (seen.indexOf(key) >= 0) return null;
+    if (!state.profiles.length) state = Object.assign(DEFAULT(), s);
+    else {
+      const alias = state.aliases || {};
+      for (const ip of s.profiles) {
+        const target = state.profiles.find(p => p.id === ip.id || p.id === alias[ip.id]);
+        if (target) combineProfiles(target, ip, false); else state.profiles.push(ip);
+      }
+      if (!state.pin && s.pin) state.pin = s.pin;
+      if (!state.current && state.profiles[0]) state.current = state.profiles[0].id;
+    }
+    state.movedFrom = seen.concat([key]).slice(-5);
+    // Stored as it came, without save(): the same progress, so family sync must not see it as newly changed
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* storage blocked */ }
+    return { players: s.profiles.length, family: !!m.family, push: m.push || null };
+  }
+  function movedSheet(info) {
+    openSheet(`<div class="stack">
+      <div class="row between"><h2>🎉 Welcome to pmlm.uk</h2><button class="iconbtn" data-act="close" aria-label="Close">✕</button></div>
+      <p>The game has its own address now, and ${info.players === 1 ? 'your progress' : 'everyone’s progress'} came along. Use <b>pmlm.uk</b> from now on.</p>
+      <ul class="plain">
+        ${Online.install.standalone ? '' : '<li>📲 On a phone or tablet, add <b>pmlm.uk</b> to the Home Screen, and remove the old icon.</li>'}
+        ${info.family ? '<li>☁️ This device was linked to a family account. To keep saving online, link it again under Parents → Family account (a parent shows a code), or log in again as a parent.</li>' : ''}
+        ${info.push ? '<li>🔔 Turn the daily reminder on again under Parents → Daily reminder.</li>' : ''}
+      </ul>
+      <button class="btn primary block" data-act="close">Let’s play!</button></div>`, true);
+  }
+  // Old Home Screen app on an iPhone or iPad: the steps, and the progress as a code to paste in the new app
+  function moveCard() {
+    if (!S.moveByCode) return '';
+    return `<div class="card stack" id="movecard"><h3>🏠 Move to pmlm.uk</h3>
+      <p style="font-size:.95rem">The game has a new address, <b>pmlm.uk</b>. This Home Screen app keeps its progress to itself, so move it in three steps:</p>
+      <ol class="steps"><li>Tap <b>Copy progress code</b> below.</li><li>In <b>Safari</b>, open <b>pmlm.uk</b> and add it to the Home Screen.</li>
+        <li>Open the new icon, tap <b>Moving from the old app?</b> and paste the code. Then delete the old icon.</li></ol>
+      <button class="btn small primary" data-act="copymove">📋 Copy progress code</button></div>`;
+  }
+
   // ---------- Boot ----------
   World.init($('#world'));
   FX.init($('#fx'));
   if (SELFTEST) { selfTest(); return; }
   if (DEBUG) window.__pmlm = { get state() { return state; }, get R() { return R; }, ACT, today, render };
-  Sync.boot();
-  Online.boot({ build: BUILD, onChange: () => {
-    const typing = document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
-    if (S.tab === 'parent' && S.screen === 'home' && !typing && !document.querySelector('.overlay')) refreshView();
-  } });
-  if (Online.firstToday()) stat('open', { n: state.profiles.length });
-  // Arrived through a friend's invite link (?invite=CODE): only a device with no players yet can use it
-  const invited = (new URLSearchParams(location.search).get('invite') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  if (invited) {
-    const u = new URL(location.href);
-    u.searchParams.delete('invite');
-    try { history.replaceState(null, '', u.pathname + u.search + u.hash); } catch (e) { /* the link stays in the address bar */ }
-    if (invitesOn() && state.profiles.length) setTimeout(() => toast('This device already plays, so the invite can\'t be used here.'), 900);
-    else if (invitesOn() && Online.invite.land(invited)) stat('invite', { mode: 'open' }, null);
-  }
-  setTimeout(() => collectInvites(), 4000);
-  render();
-  Cloud.init(remote => {
-    if (remote && remote.v === 1 && (remote.updatedAt || 0) > (state.updatedAt || 0)) {
-      state = Object.assign(DEFAULT(), remote);
-      try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* storage blocked */ }
-      if (S.screen !== 'round') render();
-    } else if (state.profiles.length) Cloud.save(state);
-  });
+  (async () => {
+    // The old address sends this device on to the game's own address, progress and all
+    if (await leaveOldAddress()) return;
+    const moved = arriveMoved(await Move.arrive());
+    Sync.boot();
+    Online.boot({ build: BUILD, onChange: () => {
+      const typing = document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+      if (S.tab === 'parent' && S.screen === 'home' && !typing && !document.querySelector('.overlay')) refreshView();
+    } });
+    if (Online.firstToday()) stat('open', { n: state.profiles.length });
+    // Arrived through a friend's invite link (?invite=CODE): only a device with no players yet can use it
+    const invited = (new URLSearchParams(location.search).get('invite') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (invited) {
+      const u = new URL(location.href);
+      u.searchParams.delete('invite');
+      try { history.replaceState(null, '', u.pathname + u.search + u.hash); } catch (e) { /* the link stays in the address bar */ }
+      if (invitesOn() && state.profiles.length) setTimeout(() => toast('This device already plays, so the invite can\'t be used here.'), 900);
+      else if (invitesOn() && Online.invite.land(invited)) stat('invite', { mode: 'open' }, null);
+    }
+    setTimeout(() => collectInvites(), 4000);
+    render();
+    if (moved) setTimeout(() => movedSheet(moved), 700);
+    Cloud.init(remote => {
+      if (remote && remote.v === 1 && (remote.updatedAt || 0) > (state.updatedAt || 0)) {
+        state = Object.assign(DEFAULT(), remote);
+        try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* storage blocked */ }
+        if (S.screen !== 'round') render();
+      } else if (state.profiles.length) Cloud.save(state);
+    });
+  })();
 })();
 
 </script>
