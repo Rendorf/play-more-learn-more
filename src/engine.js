@@ -2905,7 +2905,9 @@
   async function leaveOldAddress() {
     const t = Move.target(location);
     if (!t) return false;
-    if (iosApp() && !t.test) { S.moveByCode = true; return false; }
+    // Home Screen apps on iPhone and iPad keep their own storage, so they move by code, but only once the new
+    // address really serves the game (checked in the background, so starting the game never waits for it)
+    if (iosApp() && !t.test) { Move.ready(t).then(ok => { if (ok) { S.moveByCode = true; render(); } }); return false; }
     view.innerHTML = '<div class="stack center" style="padding-block:35vh 0"><h2>🚀 Moving to pmlm.uk…</h2></div>';
     if (!(await Move.ready(t))) { view.innerHTML = ''; return false; }
     let family = false;
