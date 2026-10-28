@@ -111,6 +111,12 @@ ol.plain { padding-left: 22px; margin: 8px 0 0; }
 ol.plain li + li { margin-top: 4px; }
 .cta { text-align: center; margin-top: 34px; }
 footer { border-top: 1px solid var(--line); padding: 22px 0 40px; color: var(--muted); font-size: .9rem; text-align: center; }
+/* Google Analytics cookies: asked once, for grown-ups (src/analytics.js) */
+.consent { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 10; max-width: 560px; margin: 0 auto; padding: 16px; background: var(--panel2); border: 1px solid var(--line); border-radius: var(--r); box-shadow: 0 12px 30px rgba(0, 0, 0, .5); }
+.consent p { font-size: .97rem; }
+.consent .row { display: flex; gap: 12px; margin-top: 12px; }
+.consent .btn { flex: 1 1 0; }
+.busy .consent { display: none; }
 
 /* The panels shown while this device moves on to the game (or copies its progress code) */
 .busy main, .busy footer, .busy .switch, .busy .hero { display: none; }
@@ -288,7 +294,7 @@ footer { border-top: 1px solid var(--line); padding: 22px 0 40px; color: var(--m
       <div><b>No ads, no chat.</b> Children can't message each other.</div>
       <div><b>Nothing to buy.</b> Coins are earned by playing, never with real money.</div>
       <div><b>Private by default.</b> Progress is saved on the device. With a family account, only your family's parents and linked devices can read it.</div>
-      <div><b>Anonymous stats.</b> Play stats use random ids, never names. Switch them off in Parents → Settings.</div>
+      <div><b>Anonymous stats.</b> Play stats use random ids, never names, and Google Analytics counts visits with no names and no ads. Switch them off in Parents → Settings.</div>
     </div>
 
     <h3 class="sectiontitle">Questions</h3>
@@ -304,6 +310,10 @@ footer { border-top: 1px solid var(--line); padding: 22px 0 40px; color: var(--m
       <p>Once the game is open, yes, and progress is saved on the device as your child plays. Opening it needs a connection. A family account uploads progress when the device is back online.</p></details>
     <details><summary>Which grades and topics does it cover?</summary>
       <p>The Cambridge curriculum for Primary Stages 1 to 6 and Lower Secondary Stages 7 to 9: 48 units and 201 skills, from counting to algebra. Every skill can be practised at any time.</p></details>
+    <details id="privacy"><summary>What do you collect, and what are the cookies for?</summary>
+      <p><b>On the device:</b> progress is saved in the browser. It leaves the device only with a family account, which only your family's parents and linked devices can read.</p>
+      <p><b>Play stats:</b> what was played (grade, skill, round size, time), with random ids and never names, so we can see what helps. Switch them off in Parents → Settings.</p>
+      <p><b>Google Analytics:</b> this page and the game tell Google Analytics which screens are opened and when a round or lesson is finished, with no names, no player ids and no typed text. Advertising features are off. It uses cookies only if a grown-up taps <b>Allow</b> (here, or in the game under Parents → Settings); otherwise it counts without cookies. Google sees the device's internet address when it is used. <a href="#" data-cookies>Cookie settings</a></p></details>
     <details><summary>Is it really free?</summary>
       <p>Yes. There are no ads and nothing to buy. The game is in a friends-and-family test, so some extras (the leaderboard, reminders, inviting friends) may change.</p></details>
     <p class="cta"><a class="btn primary big" href="__PLAY__" data-play>▶ Open the game</a></p>
@@ -311,8 +321,13 @@ footer { border-top: 1px solid var(--line); padding: 22px 0 40px; color: var(--m
 </section>
 </main>
 
+<div class="consent" id="consent" role="dialog" aria-labelledby="consent-q" hidden>
+  <p id="consent-q"><b>For grown-ups:</b> may we use Google Analytics cookies to see how families find the game? No names and no ads. <a href="#privacy" data-privacy>What we collect</a></p>
+  <div class="row"><button class="btn small primary" id="ga-yes">Allow</button><button class="btn small" id="ga-no">No thanks</button></div>
+</div>
+
 <footer>
-  <div class="wrap">Play More Learn More · Cambridge maths practice, Grades 1 to 9 · version __BUILD__</div>
+  <div class="wrap">Play More Learn More · Cambridge maths practice, Grades 1 to 9 · version __BUILD__<br><a href="#privacy" data-privacy>Privacy</a><span id="cookielink" hidden> · <a href="#" data-cookies>Cookie settings</a></span></div>
 </footer>
 
 <script>
@@ -333,6 +348,35 @@ footer { border-top: 1px solid var(--line); padding: 22px 0 40px; color: var(--m
   [].forEach.call(document.querySelectorAll('[data-part]'), function (b) {
     b.addEventListener('click', function (e) { e.preventDefault(); var p = b.getAttribute('data-part'); pick(p, true); try { history.replaceState(null, '', '#' + p); } catch (err) { /* fine */ } });
   });
+
+  // Privacy links open the answer in the grown-ups part
+  [].forEach.call(document.querySelectorAll('[data-privacy]'), function (a) {
+    a.addEventListener('click', function (e) {
+      e.preventDefault(); pick('grownups', false);
+      var q = document.getElementById('privacy'); q.open = true;
+      // After the switch has been laid out, or the scroll aims at where the answer was
+      setTimeout(function () { q.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 30);
+    });
+  });
+
+  // Google Analytics (src/analytics.js), only for people who stay on this page. Cookies wait for a grown-up's Allow.
+  if (d.act === 'show' || d.act === 'oldicon') {
+    Analytics.init({ page: 'landing', build: '__BUILD__' });
+    if (Analytics.on) {
+      var banner = document.getElementById('consent');
+      var answer = function (yes) { Analytics.consent(yes); banner.hidden = true; };
+      Analytics.start();
+      if (!Analytics.choice) banner.hidden = false;
+      document.getElementById('ga-yes').addEventListener('click', function () { answer(true); });
+      document.getElementById('ga-no').addEventListener('click', function () { answer(false); });
+      document.getElementById('cookielink').hidden = false;
+      [].forEach.call(document.querySelectorAll('[data-cookies]'), function (a) { a.addEventListener('click', function (e) { e.preventDefault(); banner.hidden = false; }); });
+      [].forEach.call(document.querySelectorAll('[data-play]'), function (a) {
+        a.addEventListener('click', function () { var s = a.closest('section'); Analytics.send('play_click', { place: s ? s.id || 'page' : 'top' }); });
+      });
+      [].forEach.call(document.querySelectorAll('[data-part]'), function (b) { b.addEventListener('click', function () { Analytics.send('section_view', { section: b.getAttribute('data-part') }); }); });
+    }
+  }
 
   function showPage() { root.className = root.className.replace(/ busy\b/g, ''); ['moving', 'stuck', 'codepanel'].forEach(function (id) { document.getElementById(id).hidden = true; }); }
 

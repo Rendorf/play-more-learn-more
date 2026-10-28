@@ -128,7 +128,7 @@ git revert -m 1 <merge commit>
 
 Because `main` is protected, push the revert on a branch and merge it through a pull request like any other change.
 
-To switch off one online feature for everyone without a rollback, set it to `false` in `PMLM_FEATURES` in `src/config.js` (`stats`, `feedback`, `leaderboard`, `reminders`, `invites`, `crowd`), rebuild and release.
+To switch off one online feature for everyone without a rollback, set it to `false` in `PMLM_FEATURES` in `src/config.js` (`stats`, `feedback`, `leaderboard`, `reminders`, `invites`, `crowd`), rebuild and release. Google Analytics has its own switch: `PMLM_GA = ''` turns it off on the landing page and in the game.
 
 ## Monitoring
 

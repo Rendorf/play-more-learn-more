@@ -111,6 +111,12 @@ ol.plain { padding-left: 22px; margin: 8px 0 0; }
 ol.plain li + li { margin-top: 4px; }
 .cta { text-align: center; margin-top: 34px; }
 footer { border-top: 1px solid var(--line); padding: 22px 0 40px; color: var(--muted); font-size: .9rem; text-align: center; }
+/* Google Analytics cookies: asked once, for grown-ups (src/analytics.js) */
+.consent { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 10; max-width: 560px; margin: 0 auto; padding: 16px; background: var(--panel2); border: 1px solid var(--line); border-radius: var(--r); box-shadow: 0 12px 30px rgba(0, 0, 0, .5); }
+.consent p { font-size: .97rem; }
+.consent .row { display: flex; gap: 12px; margin-top: 12px; }
+.consent .btn { flex: 1 1 0; }
+.busy .consent { display: none; }
 
 /* The panels shown while this device moves on to the game (or copies its progress code) */
 .busy main, .busy footer, .busy .switch, .busy .hero { display: none; }
@@ -153,6 +159,118 @@ const PMLM_VAPID = 'BIzQyWxPqV1Cwj3PIbNEdwZyBNaF4RvJBa7qZxLoQMaMYcJlI2pNOy26ffZc
 // The game's own address. The old addresses (rendorf.github.io/play-more-learn-more, and pmlm.uk, now the landing
 // page) send each device here with its progress (src/move.js), once this address serves move.json. Empty: no moving.
 const PMLM_MOVE_TO = 'https://play.pmlm.uk/';
+// Google Analytics (src/analytics.js): the web stream of the project's Analytics property, used on pmlm.uk and
+// play.pmlm.uk only, cookieless until a grown-up allows cookies. Empty: no Analytics.
+const PMLM_GA = 'G-51Y7VFGZGB';
+
+</script>
+<script>/* analytics.js */
+// Google Analytics (GA4) for the landing page (pmlm.uk) and the game (play.pmlm.uk), on those live addresses only.
+// Nothing personal is sent: no names, no player or device ids, no typed text; only what happened (a screen, a round
+// finished) and a few numbers (grade, questions, seconds). Advertising features are off. Until a grown-up allows
+// analytics cookies (the landing page's banner, or Parents in the game) Google's Consent Mode keeps it cookieless.
+// The choice is the cookie pmlm_analytics on .pmlm.uk, so the landing page and the game share it. Google's script
+// loads with the first thing sent, never before. ?gatest=1 runs it on any address (tests block Google's script).
+const Analytics = (() => {
+  const ID = typeof PMLM_GA !== 'undefined' ? PMLM_GA : '';
+  const COOKIE = 'pmlm_analytics';
+  const LIVE = /(^|\.)pmlm\.uk$/;
+
+  // Whether analytics runs here: an id, a live address (or ?gatest=1), and not the owner's #debug / #selftest
+  // bookmarks or the claude.ai copy
+  function allowed(loc, id, inArtifact) {
+    if (!id || inArtifact) return false;
+    const params = new URLSearchParams(loc.search || '');
+    if (/^#(debug|selftest)$/.test(loc.hash || '') || params.get('debug') === '1') return false;
+    return LIVE.test(loc.hostname) || params.get('gatest') === '1';
+  }
+  const cookieDomain = host => (LIVE.test(host) ? '.pmlm.uk' : '');
+  // The saved choice in a document.cookie string: 'granted', 'denied' or null (not asked yet)
+  function choiceIn(cookies) {
+    const m = new RegExp('(?:^|;\\s*)' + COOKIE + '=(granted|denied)').exec(cookies || '');
+    return m ? m[1] : null;
+  }
+
+  // The game's own stats events (engine.js stat()) as Analytics events. Only the fields listed here are sent, renamed
+  // for the reports; ids (p, d), skill error text (msg) and campaign tags never are.
+  const EVENTS = {
+    open: ['game_open', { n: 'players' }],
+    player: ['player_added', { g: 'grade' }],
+    lesson: ['lesson_done', { g: 'grade', sk: 'skill' }],
+    round: ['round_done', { g: 'grade', sk: 'skill', mode: 'mode', n: 'answered', ok: 'correct', secs: 'seconds', m: 'mastered' }],
+    place: ['placement_done', { g: 'grade', n: 'answered', ok: 'correct', secs: 'seconds' }],
+    wishset: ['wishes_set', { g: 'grade', n: 'wishes' }],
+    wish: ['wish_unlocked', { g: 'grade', n: 'at' }],
+    problem: ['question_failed', { g: 'grade', sk: 'skill', n: 'level' }],
+    invite: ['invite', { mode: 'step' }],
+  };
+  function event(type, data) {
+    const e = EVENTS[type];
+    if (!e) return null;
+    const out = {};
+    for (const k of Object.keys(e[1])) {
+      const v = (data || {})[k];
+      if (typeof v === 'number' || (typeof v === 'string' && v && v.length <= 40)) out[e[1][k]] = v;
+    }
+    return { name: e[0], params: out };
+  }
+
+  // ---------- In the browser ----------
+  let page = '', build = '', on = false, loaded = false;
+  const IN_ARTIFACT = typeof window !== 'undefined' && !!(window.claude && typeof window.claude.use === 'function');
+  const gtag = function () { window.dataLayer.push(arguments); };
+  const choice = () => { try { return choiceIn(document.cookie); } catch (e) { return null; } };
+
+  // page: 'landing' or 'game'. Nothing loads yet.
+  function init(opts) {
+    page = opts.page; build = opts.build || '';
+    on = typeof window !== 'undefined' && allowed(location, ID, IN_ARTIFACT);
+  }
+  function load() {
+    if (!on || loaded) return on;
+    loaded = true;
+    window.dataLayer = window.dataLayer || [];
+    gtag('consent', 'default', { analytics_storage: choice() === 'granted' ? 'granted' : 'denied', ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' });
+    gtag('set', 'ads_data_redaction', true);
+    gtag('js', new Date());
+    // The game sends its own screen views; the landing page lets Google count the page itself
+    gtag('config', ID, { allow_google_signals: false, allow_ad_personalization_signals: false, send_page_view: page === 'landing', site_part: page, game_version: build });
+    const s = document.createElement('script');
+    s.async = true; s.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(ID);
+    document.head.appendChild(s);
+    return true;
+  }
+
+  return {
+    allowed, cookieDomain, choiceIn, event, EVENTS, COOKIE, init,
+    get on() { return on; },
+    get choice() { return choice(); },
+    // Load now (the landing page, which Google counts as a page view)
+    start: () => load(),
+    // A game stats event (see EVENTS); unknown types are dropped
+    track(type, data) { const e = event(type, data); if (e && load()) gtag('event', e.name, e.params); },
+    // Something on the landing page (play_click, section_view), with plain values only
+    send(name, params) { if (load()) gtag('event', name, params || {}); },
+    // A screen of the game as a page view (/screen/top, /screen/round, …), so the Pages report shows the game's screens
+    screen(name) {
+      if (!load()) return;
+      gtag('event', 'page_view', { page_title: name, page_location: location.origin + '/screen/' + name, page_referrer: '' });
+    },
+    // A grown-up's answer: remembered for the landing page and the game on this device for a year
+    consent(granted) {
+      const v = granted ? 'granted' : 'denied', dom = cookieDomain(location.hostname);
+      try {
+        document.cookie = `${COOKIE}=${v}; Max-Age=31536000; Path=/; SameSite=Lax${dom ? '; Domain=' + dom : ''}${location.protocol === 'https:' ? '; Secure' : ''}`;
+        // A no after a yes: Google's own cookies go too
+        if (!granted) for (const c of document.cookie.split(';')) {
+          const name = c.split('=')[0].trim();
+          if (/^_ga/.test(name)) ['', dom].forEach(d => { document.cookie = `${name}=; Max-Age=0; Path=/${d ? '; Domain=' + d : ''}`; });
+        }
+      } catch (e) { /* cookies blocked */ }
+      if (load()) gtag('consent', 'update', { analytics_storage: v });
+    },
+  };
+})();
 
 </script>
 <script>/* move.js */
@@ -466,7 +584,7 @@ const Landing = (() => {
       <div><b>No ads, no chat.</b> Children can't message each other.</div>
       <div><b>Nothing to buy.</b> Coins are earned by playing, never with real money.</div>
       <div><b>Private by default.</b> Progress is saved on the device. With a family account, only your family's parents and linked devices can read it.</div>
-      <div><b>Anonymous stats.</b> Play stats use random ids, never names. Switch them off in Parents → Settings.</div>
+      <div><b>Anonymous stats.</b> Play stats use random ids, never names, and Google Analytics counts visits with no names and no ads. Switch them off in Parents → Settings.</div>
     </div>
 
     <h3 class="sectiontitle">Questions</h3>
@@ -482,6 +600,10 @@ const Landing = (() => {
       <p>Once the game is open, yes, and progress is saved on the device as your child plays. Opening it needs a connection. A family account uploads progress when the device is back online.</p></details>
     <details><summary>Which grades and topics does it cover?</summary>
       <p>The Cambridge curriculum for Primary Stages 1 to 6 and Lower Secondary Stages 7 to 9: 48 units and 201 skills, from counting to algebra. Every skill can be practised at any time.</p></details>
+    <details id="privacy"><summary>What do you collect, and what are the cookies for?</summary>
+      <p><b>On the device:</b> progress is saved in the browser. It leaves the device only with a family account, which only your family's parents and linked devices can read.</p>
+      <p><b>Play stats:</b> what was played (grade, skill, round size, time), with random ids and never names, so we can see what helps. Switch them off in Parents → Settings.</p>
+      <p><b>Google Analytics:</b> this page and the game tell Google Analytics which screens are opened and when a round or lesson is finished, with no names, no player ids and no typed text. Advertising features are off. It uses cookies only if a grown-up taps <b>Allow</b> (here, or in the game under Parents → Settings); otherwise it counts without cookies. Google sees the device's internet address when it is used. <a href="#" data-cookies>Cookie settings</a></p></details>
     <details><summary>Is it really free?</summary>
       <p>Yes. There are no ads and nothing to buy. The game is in a friends-and-family test, so some extras (the leaderboard, reminders, inviting friends) may change.</p></details>
     <p class="cta"><a class="btn primary big" href="https://play.pmlm.uk/" data-play>▶ Open the game</a></p>
@@ -489,8 +611,13 @@ const Landing = (() => {
 </section>
 </main>
 
+<div class="consent" id="consent" role="dialog" aria-labelledby="consent-q" hidden>
+  <p id="consent-q"><b>For grown-ups:</b> may we use Google Analytics cookies to see how families find the game? No names and no ads. <a href="#privacy" data-privacy>What we collect</a></p>
+  <div class="row"><button class="btn small primary" id="ga-yes">Allow</button><button class="btn small" id="ga-no">No thanks</button></div>
+</div>
+
 <footer>
-  <div class="wrap">Play More Learn More · Cambridge maths practice, Grades 1 to 9 · version 2026-10-28 10:20 UTC</div>
+  <div class="wrap">Play More Learn More · Cambridge maths practice, Grades 1 to 9 · version 2026-10-28 14:32 UTC<br><a href="#privacy" data-privacy>Privacy</a><span id="cookielink" hidden> · <a href="#" data-cookies>Cookie settings</a></span></div>
 </footer>
 
 <script>
@@ -511,6 +638,35 @@ const Landing = (() => {
   [].forEach.call(document.querySelectorAll('[data-part]'), function (b) {
     b.addEventListener('click', function (e) { e.preventDefault(); var p = b.getAttribute('data-part'); pick(p, true); try { history.replaceState(null, '', '#' + p); } catch (err) { /* fine */ } });
   });
+
+  // Privacy links open the answer in the grown-ups part
+  [].forEach.call(document.querySelectorAll('[data-privacy]'), function (a) {
+    a.addEventListener('click', function (e) {
+      e.preventDefault(); pick('grownups', false);
+      var q = document.getElementById('privacy'); q.open = true;
+      // After the switch has been laid out, or the scroll aims at where the answer was
+      setTimeout(function () { q.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 30);
+    });
+  });
+
+  // Google Analytics (src/analytics.js), only for people who stay on this page. Cookies wait for a grown-up's Allow.
+  if (d.act === 'show' || d.act === 'oldicon') {
+    Analytics.init({ page: 'landing', build: '2026-10-28 14:32 UTC' });
+    if (Analytics.on) {
+      var banner = document.getElementById('consent');
+      var answer = function (yes) { Analytics.consent(yes); banner.hidden = true; };
+      Analytics.start();
+      if (!Analytics.choice) banner.hidden = false;
+      document.getElementById('ga-yes').addEventListener('click', function () { answer(true); });
+      document.getElementById('ga-no').addEventListener('click', function () { answer(false); });
+      document.getElementById('cookielink').hidden = false;
+      [].forEach.call(document.querySelectorAll('[data-cookies]'), function (a) { a.addEventListener('click', function (e) { e.preventDefault(); banner.hidden = false; }); });
+      [].forEach.call(document.querySelectorAll('[data-play]'), function (a) {
+        a.addEventListener('click', function () { var s = a.closest('section'); Analytics.send('play_click', { place: s ? s.id || 'page' : 'top' }); });
+      });
+      [].forEach.call(document.querySelectorAll('[data-part]'), function (b) { b.addEventListener('click', function () { Analytics.send('section_view', { section: b.getAttribute('data-part') }); }); });
+    }
+  }
 
   function showPage() { root.className = root.className.replace(/ busy\b/g, ''); ['moving', 'stuck', 'codepanel'].forEach(function (id) { document.getElementById(id).hidden = true; }); }
 

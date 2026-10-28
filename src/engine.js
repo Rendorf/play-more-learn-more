@@ -869,7 +869,12 @@
   // ---------- Online extras (src/online.js): anonymous stats, leaderboard, reminders ----------
   // New player fields are optional and only written when a round is played: stats.active (seconds of active
   // play), week (this week's totals), board ('nick' | 'name' | 'hidden') and nickSeed (nickname re-rolls).
-  const stat = (type, data, p = P()) => { if (state.settings.stats !== false) Online.event(type, Object.assign(p ? { p: p.id } : {}, data)); };
+  // Play stats go to the game's own dashboard and, without ids, to Google Analytics (src/analytics.js). A grown-up's
+  // "Share anonymous play stats" switch stops both.
+  const stat = (type, data, p = P()) => { if (state.settings.stats !== false) { Online.event(type, Object.assign(p ? { p: p.id } : {}, data)); Analytics.track(type, data); } };
+  Analytics.init({ page: 'game', build: BUILD });
+  let lastScreen = '';
+  const screenView = name => { if (name !== lastScreen && state.settings.stats !== false) { lastScreen = name; Analytics.screen(name); } };
   const nickOf = p => Board.nick(p.id, p.nickSeed);
   const activeOf = p => (p.stats.active != null ? p.stats.active : Math.round((p.stats.ms || 0) / 1000));
   const weekOf = p => { const id = Board.weekId(new Date()); return p.week && p.week.id === id ? p.week : { id, pts: 0, secs: 0, q: 0, mst: 0 }; };
@@ -1274,6 +1279,7 @@
     if (lk && state.current !== lk) state.current = lk;
     setTimeout(offerReport, 700);
     const p = P();
+    screenView(p ? (S.screen === 'home' ? S.tab : S.screen) : state.profiles.length ? 'players' : 'welcome');
     if (!p) return state.profiles.length ? renderPlayers() : renderWelcome();
     if (S.screen === 'lesson') return renderLesson();
     if (S.screen === 'round') return renderQuestion();
@@ -1629,6 +1635,7 @@
       answered0: p.stats.answered,
     };
     S.screen = 'round';
+    screenView({ boss: 'boss', extra: 'challenge', place: 'placement', try: 'try' }[mode] || 'round');
     Sfx.unlock(); World.setEnergy(0);
     Music.setScene(mode === 'boss' ? 'boss' : mode === 'try' || mode === 'place' ? 'menu' : 'round'); Music.setEnergy(0);
     nextQuestion();
@@ -2350,6 +2357,7 @@
 
       <div class="card stack" style="gap:4px"><h3>⚙️ Settings</h3>
         ${Online.has('stats') ? `<label class="toggle"><span>Share anonymous play stats <span class="muted" style="font-weight:400">(no names; it helps us improve the game)</span></span><input type="checkbox" data-change="set" data-k="stats" ${state.settings.stats !== false ? 'checked' : ''}></label>` : ''}
+        ${Analytics.on ? `<label class="toggle"><span>Allow Google Analytics cookies on this device <span class="muted" style="font-weight:400">(counts visits; no names, no ads. Off: it counts without cookies. Stops with play stats.)</span></span><input type="checkbox" data-change="gaconsent" ${Analytics.choice === 'granted' ? 'checked' : ''}></label>` : ''}
         ${Online.has('invites') ? `<label class="toggle"><span>Children can share invite links <span class="muted" style="font-weight:400">(friends who join show up by player name)</span></span><input type="checkbox" data-change="set" data-k="invites" ${state.settings.invites !== false ? 'checked' : ''}></label>` : ''}
         <label class="toggle">Sound effects <input type="checkbox" data-change="set" data-k="sfx" ${state.settings.sfx ? 'checked' : ''}></label>
         <label class="toggle">Background music <input type="checkbox" data-change="set" data-k="music" ${state.settings.music !== false ? 'checked' : ''}></label>
@@ -2812,6 +2820,7 @@
     psel: () => { S.pSel = { player: $('#ps-player').value, grade: +$('#ps-grade').value }; render(); },
     pgrade: (d, el) => { const x = state.profiles.find(q => q.id === d.id); x.grade = +el.value; save(); S.keepScroll = true; render(); S.keepScroll = false; },
     set: (d, el) => { state.settings[d.k] = el.checked; save(); applyTheme(); },
+    gaconsent: (d, el) => { Analytics.consent(el.checked); toast(el.checked ? 'Analytics cookies allowed on this device' : 'No Analytics cookies on this device'); },
     currency: (d, el) => { state.settings.currency = el.value; save(); },
     devplayer: (d, el) => Sync.setDevicePlayer(d.id, el.value || null).then(() => toast(el.value ? 'Locked: that device plays only as this child' : 'Unlocked: that device can switch players'), e => toast(h(Sync.friendly(e)))),
     dailygoal: (d, el) => { state.settings.dailyGoal = +el.value; save(); S.keepScroll = true; render(); S.keepScroll = false; },

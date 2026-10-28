@@ -14,6 +14,7 @@ Each record explains one decision: what problem it solved, what was chosen, and 
 | [0005](0005-artifact-copy-uses-db-capability.md) | The claude.ai copy saves through the artifact `db` capability, not Firebase | Accepted |
 | [0006](0006-more-progress-wins-and-rest-fallback.md) | More progress wins; saving falls back to REST when the live connection is stuck | Accepted |
 | [0007](0007-landing-page-and-play-subdomain.md) | A landing page at pmlm.uk and the game at play.pmlm.uk, one Cloudflare Worker deployed by GitHub Actions | Accepted |
+| [0008](0008-google-analytics-with-consent.md) | Google Analytics on the landing page and in the game, cookieless until a grown-up allows it | Accepted |
 
 ## Adding a record
 

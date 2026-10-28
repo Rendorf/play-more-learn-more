@@ -4,7 +4,7 @@
 Writes:
   index.html            full document, works offline; GitHub Pages serves it
   stats.html            the family-test dashboard (src/stats.html with the Firebase config inlined)
-  welcome.html          the landing page at pmlm.uk (src/landing.html with config.js, move.js and landing.js inlined;
+  welcome.html          the landing page at pmlm.uk (src/landing.html with config.js, analytics.js, move.js and landing.js inlined;
                         functions/index.js serves it at pmlm.uk/, its pictures are in landing/)
   build/artifact.html   page content only, for publishing as a claude.ai Artifact
 
@@ -26,8 +26,8 @@ ROOT = Path(__file__).resolve().parent
 SRC = ROOT / "src"
 ORDER = ["config.js", "util.js", "registry.js", "validate.js",
          *[f"grade{g}.js" for g in range(1, 10)],
-         "visuals.js", "fx.js", "music.js", "board.js", "reminders.js", "online.js", "merge.js", "move.js", "engine.js"]
-LANDING_JS = ["config.js", "move.js", "landing.js"]
+         "visuals.js", "fx.js", "music.js", "board.js", "reminders.js", "online.js", "analytics.js", "merge.js", "move.js", "engine.js"]
+LANDING_JS = ["config.js", "analytics.js", "move.js", "landing.js"]
 LANDING_IMG = re.compile(r'src="(landing/[^"]+)"')
 MAX_IMG_KB = 200
 STAMP = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC")  # the build time, ignored by --check
