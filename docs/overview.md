@@ -7,7 +7,7 @@
 
 A free, playful maths practice game that follows the Cambridge curriculum skill by skill from Grade 1 to Grade 9, teaches before it tests, and only calls a skill "mastered" when the child has shown it on two different days.
 
-**Try it:** https://pmlm.uk/ (any browser; add it to the Home Screen on a phone or tablet).
+**Try it:** https://play.pmlm.uk/ (any browser; add it to the Home Screen on a phone or tablet). How it works, for kids and grown-ups: https://pmlm.uk/.
 
 ## The problem
 

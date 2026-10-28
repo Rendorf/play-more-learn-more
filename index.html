@@ -532,9 +532,9 @@ const PMLM_ENV = 'live';
 const PMLM_FEATURES = { stats: true, feedback: true, leaderboard: true, reminders: true, invites: true, crowd: true };
 // Public key for daily reminders (Web Push), written by tools/admin/setup-push.mjs. Empty: reminders stay hidden.
 const PMLM_VAPID = 'BIzQyWxPqV1Cwj3PIbNEdwZyBNaF4RvJBa7qZxLoQMaMYcJlI2pNOy26ffZckF5GzjKDiG4D7YlIX9DB_-1A3A0';
-// The game's own address. The old address (rendorf.github.io/play-more-learn-more) sends each device here with its
-// progress (src/move.js), once this address serves move.json. Empty: no moving.
-const PMLM_MOVE_TO = 'https://pmlm.uk/';
+// The game's own address. The old addresses (rendorf.github.io/play-more-learn-more, and pmlm.uk, now the landing
+// page) send each device here with its progress (src/move.js), once this address serves move.json. Empty: no moving.
+const PMLM_MOVE_TO = 'https://play.pmlm.uk/';
 
 </script>
 <script>/* util.js */
@@ -27639,15 +27639,20 @@ const PMLM_MERGE = (() => {
 
 </script>
 <script>/* move.js */
-// Moving the game to its own address (PMLM_MOVE_TO, https://pmlm.uk/). The browser keeps saved progress per
-// address, so a device that opens the old link (rendorf.github.io/play-more-learn-more) carries its progress
-// along in the new address's #move= fragment (never sent to any server), and the new address merges it in.
-// The old address only moves a device after checking that the new one really serves the game (move.json, allowed
-// for the old address through _headers), so a child is never sent to a page that isn't ready.
+// Moving the game to its own address (PMLM_MOVE_TO, https://play.pmlm.uk/). The browser keeps saved progress per
+// address, so a device that opens an old address (rendorf.github.io/play-more-learn-more, or pmlm.uk, which is now
+// the landing page) carries its progress along in the new address's #move= fragment (never sent to any server),
+// and the new address merges it in. An old address only moves a device after checking that the new one really
+// serves the game (move.json, open to every address through _headers), so a child is never sent to a page that
+// isn't ready.
 const Move = (() => {
   const TO = typeof PMLM_MOVE_TO !== 'undefined' ? PMLM_MOVE_TO : '';
   const LIVE = typeof PMLM_ENV === 'undefined' || PMLM_ENV === 'live';
-  const FROM_HOST = 'rendorf.github.io', FROM_PATH = '/play-more-learn-more';
+  const KEY = typeof PMLM_ENV !== 'undefined' && PMLM_ENV === 'preview' ? 'pmlm-preview.' : 'pmlm.';
+  const HOST = TO ? new URL(TO).hostname : '';
+  // Old addresses: the GitHub copy under its path, and pmlm.uk at any path. Never the new address itself.
+  const FROM = [['rendorf.github.io', '/play-more-learn-more'], ['pmlm.uk', ''], ['www.pmlm.uk', '']];
+  const fromOld = loc => FROM.some(([host, path]) => loc.hostname === host && (!path || loc.pathname === path || loc.pathname.indexOf(path + '/') === 0));
   const LOCAL_RE = /^(localhost|127\.0\.0\.1|\[::1\])$/;
 
   // ---------- Packing progress into the link ----------
@@ -27672,8 +27677,9 @@ const Move = (() => {
     const params = new URLSearchParams(loc.search), hash = (loc.hash || '').replace('#', '');
     if (hash === 'selftest' || hash === 'debug' || /[?&]debug=1/.test(loc.search)) return null;
     if (LOCAL_RE.test(loc.hostname) && params.get('moveto')) return { url: params.get('moveto'), test: true };
-    if (!LIVE || !TO || loc.hostname !== FROM_HOST || !(loc.pathname === FROM_PATH || loc.pathname.indexOf(FROM_PATH + '/') === 0)) return null;
+    if (!LIVE || !TO || loc.hostname === HOST || !fromOld(loc)) return null;
     params.delete('moveto');
+    params.delete('stay');
     const q = params.toString();
     return { url: TO + (q ? '?' + q : ''), test: false };
   }
@@ -27691,8 +27697,20 @@ const Move = (() => {
     } catch (e) { return false; } finally { clearTimeout(timer); }
   }
 
+  // What a device takes along, read straight from storage (the game and the landing page share it), or null when
+  // it has no players. Sign-ins stay behind: they belong to the old address, so linked devices link again.
+  function payload(store) {
+    const read = k => { try { return JSON.parse(store.getItem(KEY + k)); } catch (e) { return null; } };
+    const state = read('v1');
+    if (!state || state.v !== 1 || !Array.isArray(state.profiles) || !state.profiles.length) return null;
+    let family = false;
+    try { family = !!store.getItem(KEY + 'sync'); } catch (e) { /* storage blocked */ }
+    const p = read('push');
+    return { v: 1, state, family, push: p && p.on ? { hour: p.hour == null ? 17 : p.hour } : null };
+  }
+
   return {
-    TO, target, encode, decode, ready,
+    TO, HOST, target, encode, decode, ready, payload,
     // Send this device to the new address with its progress (check ready() first). False if it stays here.
     async go(payload, t) {
       let code;
@@ -27735,7 +27753,7 @@ const Move = (() => {
   // The preview copy (build.py --preview) keeps its own storage, so it never reads or writes real progress
   const KEY = typeof PMLM_ENV !== 'undefined' && PMLM_ENV === 'preview' ? 'pmlm-preview.' : 'pmlm.';
   const STORE_KEY = KEY + 'v1';
-  const BUILD = '2026-10-28 10:46 UTC';   // replaced with the build time by build.py
+  const BUILD = '2026-10-28 12:52 UTC';   // replaced with the build time by build.py
 
   const AVATARS = ['🦊', '🐼', '🐯', '🐸', '🐧', '🦄', '🐨', '🐰'];
   const SHOP_AVATARS = [['🦁', 40], ['🦉', 40], ['🐙', 40], ['🦋', 40], ['🐳', 50], ['🦩', 50], ['🐲', 60], ['🦖', 60], ['👽', 80], ['🤖', 80], ['🐉', 120], ['🦄', 0]].filter(a => a[1] > 0);
@@ -29129,7 +29147,7 @@ const Move = (() => {
       setTimeout(() => showCelebrations([{ e: team().emoji || '🤝', title: 'Family goal reached!', text: team().text, wish: true }]), 500);
     }
     let html = `<div class="stack">
-      ${S.moveByCode ? '<button class="card" data-act="tab" data-id="parent" style="border:0;text-align:left"><b>🏠 The game moved to pmlm.uk.</b> Ask a grown-up to move your progress: Parents → Move to pmlm.uk.</button>' : ''}
+      ${S.moveByCode ? '<button class="card" data-act="tab" data-id="parent" style="border:0;text-align:left"><b>🏠 The game moved to ' + h(Move.HOST) + '.</b> Ask a grown-up to move your progress: Parents → Move to ' + h(Move.HOST) + '.</button>' : ''}
       ${gradePick(g)}
       ${todayCard(p)}
       <div class="card stack">
@@ -30381,10 +30399,10 @@ const Move = (() => {
       const code = JSON.stringify(state);
       const show = () => openSheet(`<div class="stack"><h2>📋 Progress code</h2><p class="muted">Select all of it and copy it.</p>
         <div class="field"><textarea id="movecodeout" readonly>${h(code)}</textarea></div><button class="btn ghost block" data-act="close">Done</button></div>`, true);
-      try { navigator.clipboard.writeText(code).then(() => toast('Copied! Now open pmlm.uk in Safari.'), show); } catch (e) { show(); }
+      try { navigator.clipboard.writeText(code).then(() => toast(`Copied! Now open ${h(Move.HOST)} in Safari.`), show); } catch (e) { show(); }
     },
     moveopen: () => openSheet(`<div class="stack"><div class="row between"><h2>📦 Bring your progress</h2><button class="iconbtn" data-act="close" aria-label="Close">✕</button></div>
-      <p class="muted">In the old app, a grown-up opens <b>Parents → Move to pmlm.uk</b> and taps <b>Copy progress code</b>. Paste it here.</p>
+      <p class="muted">Open the old icon and tap <b>📋 Copy progress code</b>. The old pmlm.uk icon shows it straight away; on an older icon a grown-up finds it under <b>Parents → Move to ${h(Move.HOST)}</b>. Paste it here.</p>
       <div class="field"><label for="movecode">Progress code</label><textarea id="movecode" placeholder="Paste the code here"></textarea></div>
       <button class="btn primary block" data-act="movego">Use this code</button></div>`, true),
     movego: () => importCode($('#movecode').value),
@@ -30622,14 +30640,14 @@ const Move = (() => {
     // Home Screen apps on iPhone and iPad keep their own storage, so they move by code, but only once the new
     // address really serves the game (checked in the background, so starting the game never waits for it)
     if (iosApp() && !t.test) { Move.ready(t).then(ok => { if (ok) { S.moveByCode = true; render(); } }); return false; }
-    view.innerHTML = '<div class="stack center" style="padding-block:35vh 0"><h2>🚀 Moving to pmlm.uk…</h2></div>';
+    view.innerHTML = `<div class="stack center" style="padding-block:35vh 0"><h2>🚀 Moving to ${h(Move.HOST)}…</h2></div>`;
     if (!(await Move.ready(t))) { view.innerHTML = ''; return false; }
-    let family = false;
-    try { family = !!localStorage.getItem(KEY + 'sync'); } catch (e) { /* storage blocked */ }
-    const push = Online.push.state.on ? { hour: Online.push.state.hour } : null;
+    const payload = Move.payload(localStorage);
+    // A device with no players yet has nothing to take along
+    if (!payload) { location.replace(t.url); return true; }
     // Reminders from the old address would come twice once they are turned on again over there
-    if (push) await Online.push.disable().catch(() => {});
-    return Move.go({ v: 1, state, family, push }, t);
+    if (payload.push) await Online.push.disable().catch(() => {});
+    return Move.go(payload, t);
   }
   // Merge progress that came from the old address. The same copy arriving again (an old bookmark) changes nothing.
   function arriveMoved(m) {
@@ -30637,12 +30655,14 @@ const Move = (() => {
     if (!s || s.v !== 1 || !Array.isArray(s.profiles)) return null;
     const key = `${s.updatedAt || 0}:${s.profiles.length}`, seen = state.movedFrom || [];
     if (seen.indexOf(key) >= 0) return null;
-    if (!state.profiles.length) state = Object.assign(DEFAULT(), s);
+    // A fresh device takes everything; a device that has (or had) players merges, keeping what was removed here
+    if (!state.profiles.length && !Object.keys(state.deleted || {}).length) state = Object.assign(DEFAULT(), s);
     else {
       const alias = state.aliases || {};
       for (const ip of s.profiles) {
         const target = state.profiles.find(p => p.id === ip.id || p.id === alias[ip.id]);
-        if (target) combineProfiles(target, ip, false); else state.profiles.push(ip);
+        if (target) combineProfiles(target, ip, false);
+        else if (!(state.deleted && state.deleted[ip.id])) state.profiles.push(ip);   // removed here on purpose
       }
       if (!state.pin && s.pin) state.pin = s.pin;
       if (!state.current && state.profiles[0]) state.current = state.profiles[0].id;
@@ -30650,15 +30670,19 @@ const Move = (() => {
     state.movedFrom = seen.concat([key]).slice(-5);
     // Stored as it came, without save(): the same progress, so family sync must not see it as newly changed
     try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* storage blocked */ }
+    // The family sign-in stayed at the old address: the family-saving status then says "link it again" instead of
+    // quietly showing "Not connected"
+    if (m.family) try { if (!localStorage.getItem(KEY + 'sync')) localStorage.setItem(KEY + 'sync', '1'); } catch (e) { /* storage blocked */ }
     return { players: s.profiles.length, family: !!m.family, push: m.push || null };
   }
   function movedSheet(info) {
+    const H = h(Move.HOST);
     openSheet(`<div class="stack">
-      <div class="row between"><h2>🎉 Welcome to pmlm.uk</h2><button class="iconbtn" data-act="close" aria-label="Close">✕</button></div>
-      <p>The game has its own address now, and ${info.players === 1 ? 'your progress' : 'everyone’s progress'} came along. Use <b>pmlm.uk</b> from now on.</p>
+      <div class="row between"><h2>🎉 Welcome to ${H}</h2><button class="iconbtn" data-act="close" aria-label="Close">✕</button></div>
+      <p>The game has its own address now, and ${info.players === 1 ? 'your progress' : 'everyone’s progress'} came along. Use <b>${H}</b> from now on.</p>
       <ul class="plain">
-        ${Online.install.standalone ? '' : '<li>📲 On a phone or tablet, add <b>pmlm.uk</b> to the Home Screen, and remove the old icon.</li>'}
-        ${info.family ? '<li>☁️ This device was linked to a family account. To keep saving online, link it again under Parents → Family account (a parent shows a code), or log in again as a parent.</li>' : ''}
+        ${Online.install.standalone ? '' : `<li>📲 On a phone or tablet, add <b>${H}</b> to the Home Screen, and remove the old icon.</li>`}
+        ${info.family ? `<li>☁️ This device was linked to a family account, and sign-ins stay at the old address. A grown-up links it again: on the parent’s phone, open ${H}, <b>Parent login</b>, then <b>🔗 Devices and parents → Link a child’s device</b>; here, <b>Parents → ☁️ Family account → Link to my family</b>. Then set <b>🔒 Plays as</b> again and unlink the old row.</li>` : ''}
         ${info.push ? '<li>🔔 Turn the daily reminder on again under Parents → Daily reminder.</li>' : ''}
       </ul>
       <button class="btn primary block" data-act="close">Let’s play!</button></div>`, true);
@@ -30666,10 +30690,12 @@ const Move = (() => {
   // Old Home Screen app on an iPhone or iPad: the steps, and the progress as a code to paste in the new app
   function moveCard() {
     if (!S.moveByCode) return '';
-    return `<div class="card stack" id="movecard"><h3>🏠 Move to pmlm.uk</h3>
-      <p style="font-size:.95rem">The game has a new address, <b>pmlm.uk</b>. This Home Screen app keeps its progress to itself, so move it in three steps:</p>
-      <ol class="steps"><li>Tap <b>Copy progress code</b> below.</li><li>In <b>Safari</b>, open <b>pmlm.uk</b> and add it to the Home Screen.</li>
-        <li>Open the new icon, tap <b>Moving from the old app?</b> and paste the code. Then delete the old icon.</li></ol>
+    const H = h(Move.HOST);
+    return `<div class="card stack" id="movecard"><h3>🏠 Move to ${H}</h3>
+      <p style="font-size:.95rem">The game has a new address, <b>${H}</b>. This Home Screen app keeps its progress to itself, so move it in four steps:</p>
+      <ol class="steps"><li>Tap <b>Copy progress code</b> below.</li><li>In <b>Safari</b>, open <b>${H}</b> and add it to the Home Screen (Share → Add to Home Screen).</li>
+        <li>Open the <b>new</b> icon, tap <b>Moving from the old app?</b> and paste the code. Check your players are there.</li>
+        <li>Only then delete this old icon.</li></ol>
       <button class="btn small primary" data-act="copymove">📋 Copy progress code</button></div>`;
   }
 

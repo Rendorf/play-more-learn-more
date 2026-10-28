@@ -1,5 +1,6 @@
 # Cloudflare Pages response headers (GitHub Pages ignores this file).
-# The old address checks move.json before sending a device here with its progress (src/move.js).
+# The old addresses (rendorf.github.io and the pmlm.uk landing page) check move.json before sending a device here with
+# its progress (src/move.js). The file is public and no credentials are sent, so any address may read it.
 /move.json
-  Access-Control-Allow-Origin: https://rendorf.github.io
+  Access-Control-Allow-Origin: *
   Cache-Control: no-store

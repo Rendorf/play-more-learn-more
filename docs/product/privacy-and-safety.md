@@ -1,7 +1,7 @@
 # Privacy and safety
 
 **Who this is for:** parents, schools and partners who want to know what happens to children's data, the owner, and team members who change anything that stores or sends data.
-**Last checked against:** BUILD 2026-10-25 18:32 UTC.
+**Last checked against:** BUILD 2026-10-28 10:20 UTC.
 
 > **Status: this page describes how the game works today and what we intend. It is not a legal privacy notice and does not claim compliance with any law.** See [Legal posture](#7-legal-posture-intent-not-a-claim).
 
@@ -26,11 +26,17 @@ Everything the game needs is kept in the browser's own storage on the device (`l
 
 **Backup codes and files** contain the whole progress record, including names and the PIN. They are made only when a grown-up asks, and they go where the grown-up puts them.
 
+**Moving to play.pmlm.uk.** Browsers keep data per address, so when the game moved, each device's progress had to come along once. An old address (pmlm.uk, or the GitHub address) puts the whole progress record into the `#fragment` of the link to play.pmlm.uk. Browsers never send a link's fragment to a server; play.pmlm.uk reads it on the device and removes it from the address bar. The copy at the old address stays on the device as a safety net (pmlm.uk also notes that it moved it), until the browser's data for that address is cleared. Sign-ins don't move: a parent logs in again, and linked devices are linked again. On an iPhone or iPad Home Screen app, a grown-up copies the same record as a progress code and pastes it into the new app.
+
 Clearing the browser's data for the site deletes all of this from the device.
 
 ## 3. What is stored online, and who can see it
 
-The online parts use one **Firebase** project (a Google cloud service). The game itself is hosted on **GitHub Pages**. Fonts load from **Google Fonts**, and the family-account code loads from Google's servers, so those services see the device's internet address when the game opens.
+The online parts use one **Firebase** project (a Google cloud service). The game (play.pmlm.uk) and the landing page (pmlm.uk) are served by **Cloudflare** (a Worker with static files); the old address by **GitHub Pages**. Fonts load from **Google Fonts**, and the family-account code loads from Google's servers, so those services see the device's internet address when the game opens.
+
+### The landing page (pmlm.uk)
+
+The "how it works" page has no analytics, trackers, ads or sign-in, and sends nothing to Firebase. For a visitor who only reads it, it stores nothing on the device. Before drawing, it reads the game's saved progress at pmlm.uk, if there is any, only to decide whether to move that device to play.pmlm.uk (see above). Like the game, it loads fonts from Google Fonts.
 
 ### Family accounts (optional)
 
@@ -110,7 +116,7 @@ The game is used by children, so children's privacy laws are likely to apply. Ex
 - TODO(owner): write and publish a privacy notice for parents (and a child-friendly version).
 - TODO(owner): decide on verifiable parental consent before any data leaves the device (for example, ask a grown-up before stats, the leaderboard and invites switch on).
 - TODO(owner): confirm the lawful basis for anonymous stats, and whether stats should be **off** by default.
-- TODO(owner): confirm the Firebase data location and sign Google's data processing terms; list all processors (Google/Firebase, GitHub, push services, Google Fonts).
+- TODO(owner): confirm the Firebase data location and sign Google's data processing terms; list all processors (Google/Firebase, Cloudflare, GitHub, push services, Google Fonts).
 - TODO(owner): decide whether "First name" on the public leaderboard should be allowed at all.
 - TODO(owner): set a data retention period and a breach response plan.
 - TODO(owner): a data protection impact assessment before any school use.

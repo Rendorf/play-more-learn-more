@@ -21,7 +21,9 @@ const args = process.argv.slice(2);
 const opt = name => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : null; };
 const ENV = opt('--env') || 'live', DRY = args.includes('--dry-run'), ONLY = opt('--only'), EMU = args.includes('--emulator');
 const NOW = opt('--now') ? Date.parse(opt('--now')) : Date.now();
-const SITE = ENV === 'staging' ? 'https://rendorf.github.io/pmlm-preview/' : 'https://pmlm.uk/';
+// The contact address the push services see. Taps open the address each device subscribed from (sw.js opens its own
+// scope), so an old pmlm.uk subscription lands on the landing page, which sends the device on to play.pmlm.uk.
+const SITE = ENV === 'staging' ? 'https://rendorf.github.io/pmlm-preview/' : 'https://play.pmlm.uk/';
 const root = new URL('../../', import.meta.url);
 
 // The game's own files: reminder rules and the public key
@@ -70,7 +72,7 @@ async function main() {
     if (DRY) { console.log(`${who}…  send ${p.id}: "${p.title}" / "${p.body}" (${p.reason})`); sent++; continue; }
     try {
       await webpush.sendNotification({ endpoint: d.sub.endpoint, keys: { p256dh: d.sub.p256dh, auth: d.sub.auth } },
-        JSON.stringify({ title: p.title, body: p.body, url: SITE }), { TTL: 6 * 3600, urgency: 'normal' });
+        JSON.stringify({ title: p.title, body: p.body }), { TTL: 6 * 3600, urgency: 'normal' });
       await doc.ref.update({ lastSent: p.day, lastMsg: p.id });
       sent++;
     } catch (e) {

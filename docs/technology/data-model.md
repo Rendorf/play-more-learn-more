@@ -105,7 +105,7 @@ All use the same prefix (`pmlm.` live, `pmlm-preview.` preview).
 | Key | Store | Written by | Holds |
 |---|---|---|---|
 | `pmlm.v1` | localStorage | `engine.js` | game state (above) |
-| `pmlm.sync` | localStorage | `Sync` | `'1'` while this device is signed in to a family, so the SDK loads at start |
+| `pmlm.sync` | localStorage | `Sync` | `'1'` while this device is signed in to a family, so the SDK loads at start. Also set when progress arrives from an old address that was in a family, so the status says "link it again" |
 | `pmlm.dev` | localStorage | `Online` | random device id for stats (`d` + 11 characters) |
 | `pmlm.anon` | localStorage | `Online` | the extras' anonymous account: `{ uid, refresh }` (refresh token) |
 | `pmlm.q` | localStorage | `Online` | queue of unsent `events` / `feedback` (last 200) |
@@ -114,6 +114,7 @@ All use the same prefix (`pmlm.` live, `pmlm-preview.` preview).
 | `pmlm.push` | localStorage | `Online` | `{ on, hour }` for reminders |
 | `pmlm.inv` | localStorage | `Online` | this device's invite code per player: `{ [pid]: code }` |
 | `pmlm.ref` | localStorage | `Online` | the invite this device came through: `{ code, stage, sent, t, name?, joined?, played?, gift?, dead? }` |
+| `pmlm.moved` | localStorage | landing page (pmlm.uk only) | `{ key, t }`: the progress (`updatedAt:players`) this device already took to play.pmlm.uk, so the same copy isn't sent again |
 | `pmlm.dayShift` | sessionStorage | `#debug` only | debug clock shift in days (always the `pmlm.` prefix) |
 
 The Firebase SDK keeps its own sign-in data in IndexedDB.

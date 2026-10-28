@@ -1,7 +1,7 @@
 # Architecture decisions
 
 **Who this is for:** the owner and engineers who want to know why the game is built the way it is, before changing it.
-**Last checked against:** BUILD 2026-10-25 18:32 UTC.
+**Last checked against:** BUILD 2026-10-28 10:20 UTC.
 
 Each record explains one decision: what problem it solved, what was chosen, and what it costs. These first five were written after the fact from the code and its comments. Where the reason is not written down anywhere, the text says "(inferred)".
 
@@ -13,6 +13,7 @@ Each record explains one decision: what problem it solved, what was chosen, and 
 | [0004](0004-push-only-service-worker.md) | A service worker for push only, with no caching | Accepted |
 | [0005](0005-artifact-copy-uses-db-capability.md) | The claude.ai copy saves through the artifact `db` capability, not Firebase | Accepted |
 | [0006](0006-more-progress-wins-and-rest-fallback.md) | More progress wins; saving falls back to REST when the live connection is stuck | Accepted |
+| [0007](0007-landing-page-and-play-subdomain.md) | A landing page at pmlm.uk and the game at play.pmlm.uk, one Cloudflare Worker deployed by GitHub Actions | Accepted |
 
 ## Adding a record
 

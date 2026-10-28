@@ -1,0 +1,8 @@
+{
+  "name": "pmlm-deploy",
+  "private": true,
+  "description": "Wrangler, pinned, for publishing the site to its Cloudflare Worker (.github/workflows/deploy.yml) and for tools/deploy/smoke.sh.",
+  "devDependencies": {
+    "wrangler": "4.150.0"
+  }
+}

@@ -1,12 +1,17 @@
-// Moving the game to its own address (PMLM_MOVE_TO, https://pmlm.uk/). The browser keeps saved progress per
-// address, so a device that opens the old link (rendorf.github.io/play-more-learn-more) carries its progress
-// along in the new address's #move= fragment (never sent to any server), and the new address merges it in.
-// The old address only moves a device after checking that the new one really serves the game (move.json, allowed
-// for the old address through _headers), so a child is never sent to a page that isn't ready.
+// Moving the game to its own address (PMLM_MOVE_TO, https://play.pmlm.uk/). The browser keeps saved progress per
+// address, so a device that opens an old address (rendorf.github.io/play-more-learn-more, or pmlm.uk, which is now
+// the landing page) carries its progress along in the new address's #move= fragment (never sent to any server),
+// and the new address merges it in. An old address only moves a device after checking that the new one really
+// serves the game (move.json, open to every address through _headers), so a child is never sent to a page that
+// isn't ready.
 const Move = (() => {
   const TO = typeof PMLM_MOVE_TO !== 'undefined' ? PMLM_MOVE_TO : '';
   const LIVE = typeof PMLM_ENV === 'undefined' || PMLM_ENV === 'live';
-  const FROM_HOST = 'rendorf.github.io', FROM_PATH = '/play-more-learn-more';
+  const KEY = typeof PMLM_ENV !== 'undefined' && PMLM_ENV === 'preview' ? 'pmlm-preview.' : 'pmlm.';
+  const HOST = TO ? new URL(TO).hostname : '';
+  // Old addresses: the GitHub copy under its path, and pmlm.uk at any path. Never the new address itself.
+  const FROM = [['rendorf.github.io', '/play-more-learn-more'], ['pmlm.uk', ''], ['www.pmlm.uk', '']];
+  const fromOld = loc => FROM.some(([host, path]) => loc.hostname === host && (!path || loc.pathname === path || loc.pathname.indexOf(path + '/') === 0));
   const LOCAL_RE = /^(localhost|127\.0\.0\.1|\[::1\])$/;
 
   // ---------- Packing progress into the link ----------
@@ -31,8 +36,9 @@ const Move = (() => {
     const params = new URLSearchParams(loc.search), hash = (loc.hash || '').replace('#', '');
     if (hash === 'selftest' || hash === 'debug' || /[?&]debug=1/.test(loc.search)) return null;
     if (LOCAL_RE.test(loc.hostname) && params.get('moveto')) return { url: params.get('moveto'), test: true };
-    if (!LIVE || !TO || loc.hostname !== FROM_HOST || !(loc.pathname === FROM_PATH || loc.pathname.indexOf(FROM_PATH + '/') === 0)) return null;
+    if (!LIVE || !TO || loc.hostname === HOST || !fromOld(loc)) return null;
     params.delete('moveto');
+    params.delete('stay');
     const q = params.toString();
     return { url: TO + (q ? '?' + q : ''), test: false };
   }
@@ -50,8 +56,20 @@ const Move = (() => {
     } catch (e) { return false; } finally { clearTimeout(timer); }
   }
 
+  // What a device takes along, read straight from storage (the game and the landing page share it), or null when
+  // it has no players. Sign-ins stay behind: they belong to the old address, so linked devices link again.
+  function payload(store) {
+    const read = k => { try { return JSON.parse(store.getItem(KEY + k)); } catch (e) { return null; } };
+    const state = read('v1');
+    if (!state || state.v !== 1 || !Array.isArray(state.profiles) || !state.profiles.length) return null;
+    let family = false;
+    try { family = !!store.getItem(KEY + 'sync'); } catch (e) { /* storage blocked */ }
+    const p = read('push');
+    return { v: 1, state, family, push: p && p.on ? { hour: p.hour == null ? 17 : p.hour } : null };
+  }
+
   return {
-    TO, target, encode, decode, ready,
+    TO, HOST, target, encode, decode, ready, payload,
     // Send this device to the new address with its progress (check ready() first). False if it stays here.
     async go(payload, t) {
       let code;

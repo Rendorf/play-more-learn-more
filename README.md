@@ -2,7 +2,7 @@
 
 A free, playful maths practice game for the Cambridge curriculum, Grades 1–9 (Primary Stages 1–6 and Lower Secondary Stages 7–9).
 
-**Play it:** https://pmlm.uk/ (or open `index.html` in any browser). The old address, https://rendorf.github.io/play-more-learn-more/, moves each device to pmlm.uk with its progress.
+**Play it:** https://play.pmlm.uk/ (or open `index.html` in any browser). **How it works**, for kids and for grown-ups: https://pmlm.uk/. The old addresses, https://rendorf.github.io/play-more-learn-more/ and pmlm.uk itself (which served the game until October 2026), move each device to play.pmlm.uk with its progress.
 
 - Short lessons with pictures, then practice with hints that get more helpful after each try
 - Combo streaks with escalating sound and effects, boss battles, daily quests, coins and trophies
@@ -41,12 +41,17 @@ Product, technology and design documentation, for the team, new members, partner
 | `src/board.js` | Leaderboard nicknames, weeks and ranking |
 | `src/reminders.js` | Reminder messages and the rules for when to send one |
 | `src/stats.html` | The test dashboard (built into `stats.html`) |
+| `src/move.js` | Moving a device's progress from an old address to play.pmlm.uk |
+| `src/landing.html`, `src/landing.js` | The landing page at pmlm.uk (built into `welcome.html`), and what it does for a device that played there |
+| `landing/` | The landing page's pictures: real game screenshots (`cd tests && npm run shots`) |
+| `worker/index.js` | The Cloudflare Worker's code, for `/` only: the landing page on pmlm.uk, the game on every other host |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Home Screen app and reminder notifications (`node tools/make-icons.mjs` redraws the icons) |
 | `tools/check-content.mjs` | Runs every question generator many times and reports problems |
 | `tools/admin/` | Owner tools: the reminder sender, database backup, reminder key setup |
+| `tools/deploy/` | Publishing to Cloudflare: pinned wrangler, the Worker's settings (`wrangler.json`), `stage.sh`, `smoke.sh`, `check-live.sh` |
 | `tests/` | Everything that must pass before a change goes to `main` (`tests/run-all.sh`) |
 
-After changing a grade file, check it, rebuild, and send it as a pull request. `main` is protected, so a change reaches the live site only through a pull request whose tests pass (see [Releasing safely](#releasing-safely)). GitHub Pages updates the live site a minute or two after the merge.
+After changing a grade file, check it, rebuild, and send it as a pull request. `main` is protected, so a change reaches the live site only through a pull request whose tests pass (see [Releasing safely](#releasing-safely)). After the merge, once the tests pass again on `main`, the **Deploy** workflow publishes play.pmlm.uk and pmlm.uk. GitHub Pages updates the old address a minute or two after the merge.
 
 ```bash
 node tools/check-content.mjs src/grade6.js
@@ -61,6 +66,18 @@ git switch -c my-change && git add -A && git commit -m "Describe the change" && 
 ```
 
 Opening `index.html#selftest` in a browser runs the same checks across all grades inside the game, including drawing every picture.
+
+### The landing page
+
+https://pmlm.uk/ explains the game, with a **For kids** / **For grown-ups** switch, pictures from the game and questions grown-ups ask. Edit `src/landing.html` (words, layout, styles) and `src/landing.js` (moving a device that played on pmlm.uk), then `python3 build.py` writes `welcome.html`. The Cloudflare Worker (`worker/index.js`) serves it at `/` on pmlm.uk and www.pmlm.uk; play.pmlm.uk and every other host get the game. Locally, open `http://localhost:8765/welcome.html`.
+
+The pictures in `landing/` are real screenshots of a local build with made-up players. After changing a screen they show, take them again and commit `landing/`:
+
+```bash
+cd tests && npm run shots
+```
+
+`python3 build.py --check` (part of the tests) fails if a picture the page uses is missing or over 200 KB.
 
 ## Family accounts (optional)
 
@@ -77,7 +94,7 @@ Without a Firebase project, progress stays in each device's browser, and backup 
 
 1. In the [Firebase console](https://console.firebase.google.com), create a project (Google Analytics can be off).
 2. **Authentication → Sign-in method:** enable **Email/Password**, **Google** and **Anonymous**. Anonymous sign-in is what linked children's devices use.
-3. **Authentication → Settings → Authorized domains:** add the site's domain (for example `rendorf.github.io`).
+3. **Authentication → Settings → Authorized domains:** add the site's domain (for example `play.pmlm.uk`). If the project's browser API key has website restrictions in Google Cloud, add the domain there too.
 4. **Firestore Database:** create a database in production mode. On the **Rules** tab, paste the whole of [`firestore.rules`](firestore.rules) and publish.
 5. **Project settings → Your apps:** add a Web app, copy its `firebaseConfig`, paste it into `src/config.js` as `PMLM_FIREBASE`, then rebuild and push.
 
@@ -140,14 +157,15 @@ Everything that must pass before a change reaches `main`. GitHub runs it on ever
 tests/run-all.sh
 ```
 
-1. Question content for all grades, and `index.html` / `stats.html` up to date with `src/`
-2. Unit tests: leaderboard ranking, weeks, nicknames, reminder timing and back-off, the online module
+1. Question content for all grades, `index.html` / `stats.html` / `welcome.html` up to date with `src/`, and the landing page's pictures present and small
+2. Unit tests: leaderboard ranking, weeks, nicknames, reminder timing and back-off, the online module, moving and the landing page's decisions, which page each host gets (`worker/index.js`) and what `tools/deploy/stage.sh` publishes
 3. Database rules in the Firestore emulator: the family-account rules and the new collections
 4. Browser tests (Chromium, and WebKit for iPhone and iPad) against local Auth and Firestore emulators:
    - every existing flow: placement, lessons, practice, PIN, wishes, boss, fix-it, shop, themes, backup codes
    - **progress safety:** progress saved by the live version (`tests/fixtures/`) opens unchanged, playing only adds, rolling back keeps everything, old backup codes work, and the preview copy never touches real progress
    - **family sync across versions:** one device on the live version, one on the new version, same child, nothing lost
    - the new features, the game with no internet, the dashboard, phone and tablet layouts, the reminder sender and backup/restore
+   - the landing page, and moving a device's progress to play.pmlm.uk from each old address (in a browser and from an iPhone Home Screen app)
 
 The browser tests never use the real Firebase project: `?emu=1` points the game at the local emulators, and family accounts are tested with `tools/mock-firebase.js`. `cd tests && npm run fixtures` refreshes the saved-progress fixtures from the live version.
 
@@ -159,10 +177,19 @@ The browser tests never use the real Firebase project: `?emu=1` points the game 
    tools/deploy-preview.sh
    ```
    It publishes `https://rendorf.github.io/pmlm-preview/` (red PREVIEW ribbon, "PMLM Preview" on the Home Screen). The preview keeps its own storage on the device. Send a test reminder there with `node tools/admin/send-reminders.mjs --env staging --only <device id>`.
-3. **Before merging:** back up the live database (read-only; the file goes outside the repository):
+3. **Cloudflare preview** (for changes to the landing page, `worker/`, `_headers` or the deploy itself): add the `preview` label to the pull request. The **Deploy** workflow uploads it to the Worker without deploying it, which proves the token and the Worker's name; with workers.dev on, it also gets an address, `https://pr-<number>-<worker>.<account>.workers.dev/` (the game; `/welcome` is the landing page), in the run's summary. It is built with the live settings, and workers.dev isn't localhost, so open its game only with `#debug`: otherwise the online extras would write to the live project. Pull requests from forks never get one. To try the Cloudflare routing on your own computer: `bash tools/deploy/smoke.sh`.
+4. **Before merging:** back up the live database (read-only; the file goes outside the repository):
    ```bash
    node tools/admin/backup-firestore.mjs --key ~/.config/pmlm/live-service-account.json
    ```
    then publish the new `firestore.rules` to the live project, and set up reminder keys if needed.
-4. **Merge** only when the tests are green and the checklist is done, then check the live version: `curl -s https://pmlm.uk/ | grep "const BUILD"`.
-5. **If something is wrong:** `git revert -m 1 <merge commit>` and push. The old version comes back in 1–2 minutes and keeps everyone's progress (the tests check this). Or switch off one feature in `PMLM_FEATURES`. `backup-firestore.mjs --restore <file> --yes` puts back database documents from a backup.
+5. **Merge** only when the tests are green and the checklist is done. The tests run again on `main`; when they pass, the **Deploy** workflow (`.github/workflows/deploy.yml`) publishes only the served files with a pinned wrangler and checks the live site itself (`tools/deploy/check-live.sh`). When the run is green, check both addresses:
+   ```bash
+   curl -s https://play.pmlm.uk/ | grep "const BUILD"
+   ```
+   ```bash
+   curl -s https://pmlm.uk/ | grep pmlm-page
+   ```
+6. **If something is wrong:** in Cloudflare, open Workers & Pages → the Worker → Deployments, and **Rollback** to the last good version; it is back at once, until the next deploy from `main`. Then `git revert -m 1 <merge commit>` on a branch and merge it through a pull request; it keeps everyone's progress (the tests check this). Or switch off one feature in `PMLM_FEATURES`. `backup-firestore.mjs --restore <file> --yes` puts back database documents from a backup.
+
+**One-time Cloudflare setup** (until it is done, the Deploy workflow stops with a message naming what is missing): a Cloudflare API token with **Account → Workers Scripts → Edit**, saved as the repository secret `CLOUDFLARE_API_TOKEN`; the account id as the secret `CLOUDFLARE_ACCOUNT_ID`; and the Worker's name as the repository variable `CF_WORKER_NAME` (the older `CF_PAGES_PROJECT` also works) (Settings → Secrets and variables → Actions). Create the `preview` label once with `gh label create preview`. The steps for moving the game to play.pmlm.uk are in [docs/technology/operations.md](docs/technology/operations.md#moving-the-game-to-playpmlmuk).

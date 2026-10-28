@@ -1,5 +1,5 @@
 // Moving to the game's own address (src/move.js). Browsers keep saved progress per address, so here
-// http://127.0.0.1:8766 plays the old address (rendorf.github.io) and http://localhost:8766 plays pmlm.uk:
+// http://127.0.0.1:8766 plays the old address (rendorf.github.io) and http://localhost:8766 plays play.pmlm.uk:
 // two addresses with separate storage, like the real move. ?moveto= is the local test switch.
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
@@ -27,7 +27,7 @@ test('a device moves with all its progress, and an old bookmark changes nothing'
   await oldDevice(context);
   await page.goto(OLD());
   await page.waitForURL(NEW);   // arrived, and the #move= part is gone from the address
-  await expect(page.locator('.sheet')).toContainText('Welcome to pmlm.uk');
+  await expect(page.locator('.sheet')).toContainText('Welcome to play.pmlm.uk');
   await expect(page.locator('.sheet')).toContainText('everyone’s progress came along');
   await page.waitForTimeout(500);
   const moved = await read(page);
@@ -60,6 +60,26 @@ test('moved players join the players already on the new address', async ({ conte
   expect(names).toEqual(['Already Here', ...JSON.parse(fx.state).profiles.map(p => p.name)].sort());
 });
 
+test('a device with no players just goes to the new address', async ({ page }) => {
+  await page.goto(OLD());
+  await page.waitForURL(NEW);
+  await page.waitForTimeout(500);
+  expect(await page.locator('.sheet').count()).toBe(0);   // nothing came along, so no welcome sheet
+});
+
+test('a player removed on the new address does not come back with a later move', async ({ context, page }) => {
+  await oldDevice(context);
+  await page.goto(OLD());
+  await page.waitForURL(NEW);
+  await page.waitForTimeout(500);
+  const gone = JSON.parse(fx.state).profiles[0].id;
+  await page.evaluate(([k, id]) => { const s = JSON.parse(localStorage.getItem(k)); s.profiles = s.profiles.filter(p => p.id !== id); s.deleted = Object.assign(s.deleted || {}, { [id]: Date.now() }); s.movedFrom = []; localStorage.setItem(k, JSON.stringify(s)); }, [STORE, gone]);
+  await page.goto(OLD());
+  await page.waitForURL(NEW);
+  await page.waitForTimeout(500);
+  expect((await read(page)).profiles.map(p => p.id)).not.toContain(gone);
+});
+
 test('when the new address is not ready, the device stays and plays as usual', async ({ context, page }) => {
   await oldDevice(context);
   await page.goto(OLD('http://localhost:9/index.html'));
@@ -73,6 +93,8 @@ test('a device that was linked to a family is told to link again', async ({ cont
   await page.goto(OLD());
   await page.waitForURL(NEW);
   await expect(page.locator('.sheet')).toContainText('linked to a family account');
+  // the family-saving status says to link it again, instead of quietly showing "Not connected"
+  expect(await page.evaluate(() => localStorage.getItem('pmlm.sync'))).toBe('1');
 });
 
 test('a Home Screen app moves with a code pasted on the welcome screen', async ({ page }) => {

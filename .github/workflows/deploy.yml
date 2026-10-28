@@ -1,0 +1,128 @@
+# Publishes the site to its Cloudflare Worker: https://play.pmlm.uk/ is the game and https://pmlm.uk/ the landing page
+# (worker/index.js picks the page by host; tools/deploy/wrangler.json has the settings). GitHub Pages still publishes
+# the repo root to the old address.
+# - Live: after the Tests workflow passes on a push to main, or by hand from the Actions tab (main only).
+# - Preview: a pull request from this repository with the "preview" label uploads a version that is not deployed, with
+#   its own address https://pr-<number>-<worker>.<account>.workers.dev/ when workers.dev is on. Forks never get one.
+# Needs the repository secrets CLOUDFLARE_API_TOKEN (a token with Account → Workers Scripts → Edit) and
+# CLOUDFLARE_ACCOUNT_ID, and the repository variable CF_WORKER_NAME (the Worker's name; CF_PAGES_PROJECT also works).
+name: Deploy
+on:
+  workflow_run:
+    workflows: [Tests]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+  pull_request:
+    types: [labeled, synchronize, opened, reopened]
+permissions:
+  contents: read
+jobs:
+  deploy:
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+      || github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'preview')
+          && github.event.pull_request.head.repo.full_name == github.repository
+          && (github.event.action != 'labeled' || github.event.label.name == 'preview'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # One deploy at a time per pull request, and one at a time for the live site; a running deploy is never cut short
+    concurrency:
+      group: deploy-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'live' }}
+      cancel-in-progress: false
+    env:
+      LIVE: ${{ github.event_name != 'pull_request' }}
+      SHA: ${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.sha }}
+      WORKER: ${{ vars.CF_WORKER_NAME || vars.CF_PAGES_PROJECT }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - name: Check the settings
+        env:
+          HAS_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+          HAS_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "::error::A manual deploy publishes main only. Choose 'main' in 'Use workflow from'."
+            exit 1
+          fi
+          missing=''
+          [ "$HAS_TOKEN" = true ] || missing="$missing secret CLOUDFLARE_API_TOKEN;"
+          [ "$HAS_ACCOUNT" = true ] || missing="$missing secret CLOUDFLARE_ACCOUNT_ID;"
+          [ -n "$WORKER" ] || missing="$missing variable CF_WORKER_NAME;"
+          if [ -n "$missing" ]; then
+            echo "::error::Not set up for Cloudflare yet. Add in Settings → Secrets and variables → Actions:$missing"
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SHA }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check that the built pages match src/
+        run: python3 build.py --check
+      - name: Stage the served files
+        run: tools/deploy/stage.sh _site
+      - name: Install wrangler
+        working-directory: tools/deploy
+        run: npm ci --no-audit --no-fund
+      - name: Try the site locally first (host routing, headers, pictures)
+        run: tools/deploy/smoke.sh
+      - name: Find the Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # Clear errors before wrangler runs: a wrong token, account or Worker name
+          api=https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts
+          code=$(curl -sS -o worker.json -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api/$WORKER/settings") || code=000
+          if [ "$code" != 200 ]; then
+            echo "::error::Cloudflare said $code for the Worker '$WORKER': $(jq -r '[.errors[]?.message] | join("; ")' worker.json 2>/dev/null)"
+            [ "$code" = 403 ] && echo "::error::The API token needs Account → Workers Scripts → Edit for this account."
+            if [ "$code" = 404 ]; then
+              names=$(curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api" | jq -r '[.result[]?.id] | join(", ")' 2>/dev/null)
+              echo "::error::Workers in this account: ${names:-none}. Set the repository variable CF_WORKER_NAME to the one serving pmlm.uk."
+            fi
+            exit 1
+          fi
+          rm -f worker.json
+      - name: Upload a preview version (not deployed)
+        id: preview
+        if: env.LIVE != 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -o pipefail
+          tools/deploy/node_modules/.bin/wrangler versions upload -c tools/deploy/wrangler.json --name "$WORKER" \
+            --preview-alias "pr-$PR_NUMBER" --message "PR #$PR_NUMBER $(git log -1 --format=%h "$SHA")" | tee upload.log
+          url=$(grep -oE 'https://pr-[^ ]+\.workers\.dev' upload.log | head -1 || true)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: Deploy the Worker
+        if: env.LIVE == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        # No routes in wrangler.json, so the custom domains set in the dashboard (pmlm.uk, play.pmlm.uk) stay as they are
+        run: |
+          tools/deploy/node_modules/.bin/wrangler deploy -c tools/deploy/wrangler.json --name "$WORKER" \
+            --message "$(git log -1 --format='%h %s' "$SHA" | cut -c1-100)"
+      - name: Check the live site
+        if: env.LIVE == 'true'
+        run: tools/deploy/check-live.sh
+      - name: Summary
+        if: success()
+        env:
+          URL: ${{ steps.preview.outputs.url }}
+        run: |
+          if [ "$LIVE" = true ]; then
+            echo "Live: https://play.pmlm.uk/ (game) and https://pmlm.uk/ (landing page), $(grep -o "const BUILD = '[^']*'" index.html)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Preview of #$PR_NUMBER uploaded (not live): ${URL:-no preview address, workers.dev may be off} (game; /welcome is the landing page)" >> "$GITHUB_STEP_SUMMARY"
+          fi
