@@ -68,6 +68,7 @@ h3 { font-size: 1.2rem; font-weight: 700; }
 p { margin: 0; }
 .muted { color: var(--muted); }
 .center { text-align: center; }
+.nobr { white-space: nowrap; }   /* keeps "Grown-ups" or "1-minute" from breaking at its hyphen */
 .num { font-family: var(--font-display); font-variant-numeric: tabular-nums; }
 
 #world { position: fixed; inset: 0; z-index: 0; width: 100%; height: 100%; display: block; transition: filter 1.2s; }
@@ -111,6 +112,7 @@ nav.tabs[hidden], header.top[hidden] { display: none !important; }
 .stack { display: flex; flex-direction: column; gap: 14px; }
 .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .row.between { justify-content: space-between; }
+.row.between > h2 { flex: 1 1 0; min-width: 0; }   /* a long title wraps beside its ✕ instead of pushing it down */
 .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .eyebrow { font-family: var(--font-display); font-weight: 700; font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
@@ -313,10 +315,10 @@ input.vol { width: 100%; min-height: 32px; accent-color: var(--accent); }
 .qmeta { display: flex; justify-content: space-between; gap: 8px; font-size: .85rem; color: var(--muted); font-weight: 700; }
 
 .answer { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; font-family: var(--font-display); font-size: 1.6rem; font-weight: 800; }
-.ansbox { min-width: 120px; min-height: 60px; padding: 4px 14px; display: grid; place-items: center; border-radius: 16px; background: var(--panel2); box-shadow: inset 0 0 0 3px var(--line); font-variant-numeric: tabular-nums; cursor: text; border: 0; color: var(--ink); font-family: var(--font-display); font-size: 1.8rem; font-weight: 800; }
+.ansbox { min-width: 120px; min-height: 60px; padding: 4px 14px; display: flex; align-items: center; justify-content: center; white-space: nowrap; border-radius: 16px; background: var(--panel2); box-shadow: inset 0 0 0 3px var(--line); font-variant-numeric: tabular-nums; cursor: text; border: 0; color: var(--ink); font-family: var(--font-display); font-size: 1.8rem; font-weight: 800; }
 .ansbox.sm { min-width: 76px; min-height: 52px; font-size: 1.5rem; }
 .ansbox.focus { box-shadow: inset 0 0 0 3px var(--sky), 0 0 0 4px color-mix(in srgb, var(--sky) 30%, transparent); }
-.ansbox .caret { display: inline-block; width: 3px; height: 1.1em; background: var(--sky); margin-left: 2px; vertical-align: -0.15em; animation: blink 1s steps(1) infinite; }
+.ansbox .caret { width: 3px; height: 1.1em; flex: none; background: var(--sky); margin-left: 2px; animation: blink 1s steps(1) infinite; }
 @keyframes blink { 50% { opacity: 0 } }
 .ansbox .ph { color: var(--muted); font-weight: 500; }
 .fracin { display: inline-flex; flex-direction: column; align-items: center; gap: 6px; }
@@ -27751,7 +27753,7 @@ const Move = (() => {
   // The preview copy (build.py --preview) keeps its own storage, so it never reads or writes real progress
   const KEY = typeof PMLM_ENV !== 'undefined' && PMLM_ENV === 'preview' ? 'pmlm-preview.' : 'pmlm.';
   const STORE_KEY = KEY + 'v1';
-  const BUILD = '2026-10-28 10:20 UTC';   // replaced with the build time by build.py
+  const BUILD = '2026-10-28 12:52 UTC';   // replaced with the build time by build.py
 
   const AVATARS = ['🦊', '🐼', '🐯', '🐸', '🐧', '🦄', '🐨', '🐰'];
   const SHOP_AVATARS = [['🦁', 40], ['🦉', 40], ['🐙', 40], ['🦋', 40], ['🐳', 50], ['🦩', 50], ['🐲', 60], ['🦖', 60], ['👽', 80], ['🤖', 80], ['🐉', 120], ['🦄', 0]].filter(a => a[1] > 0);
@@ -29932,7 +29934,7 @@ const Move = (() => {
       ...(Online.push.configured ? [['🔔 Turn on a daily reminder', 'a friendly nudge on days nobody has played.']] : []),
     ];
     openSheet(`<div class="stack">
-      <div class="row between"><h2>👋 Grown-ups: 1-minute setup</h2><button class="iconbtn" data-act="close" aria-label="Close">✕</button></div>
+      <div class="row between"><h2>👋 <span class="nobr">Grown-ups:</span> <span class="nobr">1-minute setup</span></h2><button class="iconbtn" data-act="close" aria-label="Close">✕</button></div>
       <p class="muted">A few quick things help ${h(p.name)} come back every day.</p>
       <ol class="steps">${steps.map(([t, s]) => `<li><b>${t}</b><span class="muted">${s}</span></li>`).join('')}</ol>
       <button class="btn primary block" data-act="qsgo">Set up now</button>
