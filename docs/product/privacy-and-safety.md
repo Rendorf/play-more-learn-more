@@ -32,11 +32,11 @@ Clearing the browser's data for the site deletes all of this from the device.
 
 ## 3. What is stored online, and who can see it
 
-The online parts use one **Firebase** project (a Google cloud service). The game (play.pmlm.uk) and the landing page (pmlm.uk) are served by **Cloudflare** (a Worker with static files); the old address by **GitHub Pages**. Fonts load from **Google Fonts**, and the family-account code loads from Google's servers, so those services see the device's internet address when the game opens.
+The online parts use one **Firebase** project (a Google cloud service). The game (play.pmlm.uk) and the landing page (pmlm.uk) are served by **Cloudflare** (a Worker with static files), which also adds its cookieless **Web Analytics** script to both ([below](#cloudflare-web-analytics)); the old address by **GitHub Pages**. Fonts load from **Google Fonts**, and the family-account code loads from Google's servers, so those services see the device's internet address when the game opens.
 
 ### The landing page (pmlm.uk)
 
-The "how it works" page has no ads or sign-in, and sends nothing to Firebase. It uses **Google Analytics** (below), which counts without cookies until a grown-up taps **Allow** on its banner. For a visitor who only reads it, it stores nothing on the device; answering the banner stores the choice (the cookie `pmlm_analytics`) and, after **Allow**, Google's own cookies. Before drawing, it reads the game's saved progress at pmlm.uk, if there is any, only to decide whether to move that device to play.pmlm.uk (see above). Like the game, it loads fonts from Google Fonts.
+The "how it works" page has no ads or sign-in, and sends nothing to Firebase. It uses **Google Analytics** (below), which counts without cookies until a grown-up taps **Allow** on its banner, and Cloudflare Web Analytics, which never uses cookies. For a visitor who only reads it, it stores nothing on the device; answering the banner stores the choice (the cookie `pmlm_analytics`) and, after **Allow**, Google's own cookies. Before drawing, it reads the game's saved progress at pmlm.uk, if there is any, only to decide whether to move that device to play.pmlm.uk (see above). Like the game, it loads fonts from Google Fonts.
 
 ### Family accounts (optional)
 
@@ -78,6 +78,18 @@ The landing page (pmlm.uk) and the game (play.pmlm.uk) use **Google Analytics** 
 | **Advertising** | Off: Google signals and ad personalisation are disabled, ad storage is always denied, and ad data is redacted |
 | **Who can read it** | The owner, in the Google Analytics property linked to the Firebase project |
 | **Switch off** | Per device: turn off **Share anonymous play stats** in Parents → Settings (the game then sends nothing to Analytics). For everyone: set `PMLM_GA = ''` in `src/config.js` |
+
+### Cloudflare Web Analytics
+
+Cloudflare, which serves the landing page (pmlm.uk) and the game (play.pmlm.uk), adds its **Web Analytics** script (`static.cloudflareinsights.com/beacon.min.js`) to the pages it serves there. It is a Cloudflare setting, not part of this repository's code, so the old GitHub address, local servers and the claude.ai copy don't have it.
+
+| | |
+|---|---|
+| **What is sent** | For each page load: the page address (Cloudflare doesn't log query strings), the site that linked to it, and page load timings (including Core Web Vitals). Cloudflare reports these by country, device type, browser and operating system. The game is one page, so it sees game opens, not screens. |
+| **Never sent** | Names, ids, progress or anything typed: the script only measures page loads |
+| **Cookies** | None. It stores nothing on the device: no cookies, local storage or session storage (checked on both addresses, 2026-10-28). Cloudflare says it doesn't track people across sites or fingerprint them by internet address or browser; it counts a visit as a page view arriving from another site. |
+| **Who can read it** | The owner, in the Cloudflare dashboard → Web Analytics |
+| **Switch off** | For everyone only: Cloudflare dashboard → Web Analytics → **Manage site** → Disable (or **Enable, excluding visitor data in the EU**). The cookie choice and the game's settings don't affect it. |
 
 ## 4. Names and the leaderboard
 
@@ -130,8 +142,8 @@ The game is used by children, so children's privacy laws are likely to apply. Ex
 - TODO(owner): write and publish a privacy notice for parents (and a child-friendly version).
 - TODO(owner): decide on verifiable parental consent before any data leaves the device (for example, ask a grown-up before stats, the leaderboard and invites switch on).
 - TODO(owner): confirm the lawful basis for anonymous stats, and whether stats should be **off** by default.
-- TODO(owner): confirm the Firebase data location and sign Google's data processing terms; list all processors (Google/Firebase, Google Analytics, Cloudflare, GitHub, push services, Google Fonts).
-- TODO(owner): Google Analytics' terms require a privacy policy that discloses it and its cookies. The landing page's "What do you collect?" answer is a short version; replace it with the full privacy notice above. In the Analytics property, keep Google signals off and choose a short data retention.
+- TODO(owner): confirm the Firebase data location and sign Google's data processing terms; list all processors (Google/Firebase, Google Analytics, Cloudflare for hosting and Web Analytics, GitHub, push services, Google Fonts).
+- TODO(owner): Google Analytics' terms require a privacy policy that discloses it and its cookies. The landing page's "What do you collect?" answer (which also covers Cloudflare Web Analytics) is a short version; replace it with the full privacy notice above. In the Analytics property, keep Google signals off and choose a short data retention.
 - TODO(owner): decide whether "First name" on the public leaderboard should be allowed at all.
 - TODO(owner): set a data retention period and a breach response plan.
 - TODO(owner): a data protection impact assessment before any school use.

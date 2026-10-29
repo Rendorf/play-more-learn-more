@@ -70,6 +70,7 @@ test('the landing page: grown-ups are asked once, Play taps and sections are cou
   await page.locator('footer [data-privacy]').click();
   await expect(page.locator('#privacy')).toHaveAttribute('open', '');
   await expect(page.locator('#privacy')).toContainText('Google Analytics');
+  await expect(page.locator('#privacy')).toContainText('Cloudflare Web Analytics');
 
   // A Play tap is counted (the test keeps the page here instead of opening the real game)
   await page.evaluate(() => document.querySelectorAll('[data-play]').forEach(a => a.addEventListener('click', e => e.preventDefault())));

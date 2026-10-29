@@ -7,7 +7,7 @@
 
 Play More Learn More is one web page. Everything a child needs (lessons, questions, pictures, sounds, progress) is inside that page, so it opens fast, keeps working without internet once open, and runs on old tablets. There is no app store app and no server of our own.
 
-- **Cloudflare** (a Worker with static files) hosts the game at https://play.pmlm.uk/ and a "how it works" landing page at https://pmlm.uk/, for free. The old **GitHub Pages** address still runs, only to send devices on.
+- **Cloudflare** (a Worker with static files) hosts the game at https://play.pmlm.uk/ and a "how it works" landing page at https://pmlm.uk/, for free. Cloudflare also adds its cookieless **Web Analytics** script to the pages it serves there (a dashboard setting, not in this code). The old **GitHub Pages** address still runs, only to send devices on.
 - **Progress** is saved in the browser on each device.
 - **Google Firebase** (a hosted login and database service) is optional. Families use it to see one child's progress on every device. A friends-and-family test also uses it for anonymous play stats, feedback, the leaderboard, invites and reminders.
 - **GitHub Actions** runs every test before a change goes live, publishes it to Cloudflare, and sends daily reminders once an hour.
