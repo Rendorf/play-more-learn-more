@@ -2,7 +2,7 @@
 // this computer. Run it before publishing new rules or merging a release, so there is always a restore point.
 //
 //   node backup-firestore.mjs --key ~/.config/pmlm/live-service-account.json
-//       → ~/AgentMemory/PlayMoreLearnMore-backups/<project>-<date-time>.json  (read-only for the database)
+//       → ~/AgentMemory/Software/PlayMoreLearnMore-backups/<project>-<date-time>.json  (read-only for the database)
 //   node backup-firestore.mjs --key <key.json> --restore <backup.json> --yes
 //       writes every document in the backup back (documents not in the backup are left alone)
 //   --emulator   use the local Firestore emulator instead (tests)
@@ -56,7 +56,7 @@ if (opt('--restore')) {
   const docs = {};
   for (const col of await db.listCollections()) await dumpCollection(col, docs);
   const project = EMU ? 'emulator' : JSON.parse(readFileSync(expand(opt('--key')), 'utf8')).project_id;
-  const dir = expand(opt('--out') || '~/AgentMemory/PlayMoreLearnMore-backups');
+  const dir = expand(opt('--out') || '~/AgentMemory/Software/PlayMoreLearnMore-backups');
   mkdirSync(dir, { recursive: true });
   const file = join(dir, `${project}-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.json`);
   writeFileSync(file, JSON.stringify({ project, at: new Date().toISOString(), count: Object.keys(docs).length, docs }, null, 1), { mode: 0o600 });
